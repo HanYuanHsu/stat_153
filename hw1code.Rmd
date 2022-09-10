@@ -1,0 +1,196 @@
+---
+title: "hw1code"
+author: "Han-Yuan Hsu"
+date: '2022-09-09'
+output: pdf_document
+---
+```{r}
+set.seed(111)
+```
+
+#3
+Download the dataset on the annual size of the Resident Population of California
+from https://fred.stlouisfed.org/series/CAPOP. This dataset gives the annual
+population of California from 1900 to 2021 (units are in thousands of persons and there
+is no seasonal adjustment to this data). The goal of this exercise is to fit the linear
+trend model (1) to this dataset.
+
+Note the unit for CAPOP is thousands of persons.
+```{r}
+df <- read.csv('CAPOP.csv')
+head(df)
+n = length(df$DATE) # number of timepoints, 122
+```
+
+## a
+Provide point estimates for β0, β1 along with appropriate uncertainty intervals.
+Interpret your point estimates and explain why they make sense. (4 points)
+
+Our model is $Y_i = \beta_0 + \beta_1 t_i + Z_i$. The point estimates of $\beta_0$ and $\beta_1$ are $\hat\beta_0$ and $\hat\beta_1$, which are obtained from the lm function.
+```{r}
+t <- 1:length(n)
+lin <- lm(df$CAPOP ~ 1 + t)
+summary(lin)
+```
+From the summary, we see that $\hat\beta_0$ is -4357.912 and $\hat\beta_1$ is 359.874. The 
+negative intercept may be frowned upon because the predicted population of the first timepoint (t=1) will be -4357.912 + 359.874, which is negative and so does not make sense.
+But the regression line does capture the long-term increasing trend of the population, which is shown by a positive $\hat\beta_1$.
+
+```{r, include=FALSE}
+plot(t, df$CAPOP, type='l', col='blue')
+lines(t, lin$fitted.values, col='red')
+```
+
+##b
+Along with a plot of the observed dataset, plot lines corresponding to 30 samples
+from the posterior distribution of (β0, β1). Comment on the range of uncertainty
+revealed in this plot. (4 points)
+
+From lecture, we know the posterior (β0, β1) follows
+$$t_{n-2}\big(\hat\beta, \; \frac{S(\hat\beta)}{n-2}(X'X)^{-1}\big).$$
+```{r}
+beta_hat = as.vector(lin$coefficients)
+S = sum(lin$residuals^2) # residual sum of squares
+X = as.matrix(cbind(rep(1, n), t))
+Sigma = S / (n-2) * solve(t(X) %*% X)
+```
+
+The following function gives you N independent samples from the multivariate t distribution  with specified mu, Sigma, and df (degrees of freedom):
+```{r}
+library(mvtnorm)
+get_random_t <- function(N, mu, Sigma, df) {
+  # get N samples
+  #d = length(mu) # dimension
+  rbind(mu)[rep(1, N), ] + rmvnorm(N, sigma = Sigma)/sqrt(rchisq(N, df = df)/df)
+}
+```
+
+Plot:
+```{r}
+plot(t, df$CAPOP, type='l')
+t30 <- get_random_t(N=30, mu=beta_hat, Sigma=Sigma, df=n-2)
+for(i in 1:30) {
+  abline(a=t30[i,1], b=t30[i,2], col='red')
+}
+```
+The uncertainty of the fitted lines look pretty small. The reason is as follows: from the
+Sigma matrix,
+```{r}
+Sigma
+```
+we know that $\beta_0$ follows the t distribution $t_{n-2}(\hat\beta_0, 156650.475)$. Since the distribution is close to normal, it is unlikely that $\beta_0$ will lie outside 
+of the 2-sd interval $[\hat\beta_0 - 2\sqrt{156650},\; \hat\beta_0 + 2\sqrt{156650}] = [\hat\beta_0 - 791.5, \; \hat\beta_0 + 791.5]$. But $\hat\beta_0$ is -4357.9, so 791.5 is small compared with $\hat\beta_0$. The same reasoning works for $\beta_1$, and I expect its confidence interval is even tighter because 31.18974 is way smaller.
+
+```{r, include=FALSE}
+A = matrix(c(1:12), nrow=4)
+apply(A, MARGIN=1, FUN=function(row){row+c(1,1,1)}) # why is this transposed?
+A
+```
+
+##c
+Using the results of Problem 2, provide a point estimate along with appropriate
+uncertainty quantification of the Resident Annual Population of California for the
+year 2025. Comment on whether your answer makes intuitive sense. (5 points)
+
+Year 2025 corresponds to the following timepoint:
+```{r}
+time_point = (2025 - 2021) + n
+```
+
+From problem 2, we know that the population at `time_point`, conditioned on data of past population values, follows the t distribution $t_{n-2}(\text{mu}, \,\text{scale}^2)$, where
+mu and scale are as given in the code block below:
+```{r}
+mu = beta_hat[1] + beta_hat[2] * time_point
+sigma_hat_squared = S / (n-2)
+time_point_mat = as.matrix(c(1, time_point))
+scale = sqrt(sigma_hat_squared + t(time_point_mat) %*% Sigma %*% time_point_mat)
+```
+Thus, the predicted population is just mu.
+```{r}
+mu
+```
+Let $Y_{n+1}$ be the population at `time_point`. Then
+$$\frac{Y_{n+1} - \text{mu}}{\text{scale}},$$
+again conditioned on past data, follows the standard t distribution with n-2 degrees of freedom, so we can calculate the 95% confidence interval.
+```{r}
+c(mu + scale*qt(p=.025, df=n-2), mu + scale*qt(p=.975, df=n-2))
+```
+The confidence interval makes sense to me; I expect the uncertainty of a new prediction to be larger, and indeed, the scale is slightly larger than sigma_hat, as shown below:
+```{r}
+as.vector(scale)
+sqrt(sigma_hat_squared)
+```
+
+
+
+##d
+Discuss the appropriateness of the linear trend model for this dataset. Can you
+think of any alternative models that would perhaps be more appropriate for this
+dataset? (4 points).
+It is not really appropriate to assume the population growth follows the linear model  because in reality, the growth rate of the population is affected by the events happening to the world at various time points. Since we can see from the actual trend that the slope before the 1940s is smaller and yet the slope after that gets larger, I would fit a piecewise linear model instead. I guess that increase of slope is due to baby boom after WW2?
+
+#4
+Download the google trends time series dataset for the query yahoo. This should be
+a monthly time series dataset that indicates the search popularity of this query from
+January 2004 to August 2022. The goal of this exercise is to fit the polynomial trend
+model
+$$Y_i = \beta_0 + \beta_1 t_i + \cdots + \beta_k t_i^k + Z_i$$
+with $Z_i$ iid $\sim N(0, \sigma^2)$ to this data set for an appropriate value of k $\leq$ 5.
+##a
+Visually evaluate the fit of the least squares estimate for this model to the observed
+data to pick an appropriate value of k ≤ 5. Explain the reason for your choice of
+k. (4 points).
+```{r}
+yahoo <- read.csv('yahoo.csv', header=T, skip=1)
+colnames(yahoo) = c('Month', 'y')
+yahoo <- yahoo[1:(nrow(yahoo)-1), ] # drop last row, which corresponds to Sep 2022
+#yahoo.ts <- ts(yahoo$y, start = c(2004, 1), end = c(2022, 8), frequency = 12)
+head(yahoo)
+n = length(yahoo$y) # number of timepoints
+```
+
+By looking at the plot of the yahoo trend data, I decided not to use a linear model because the data has a clear trend of going up and then going down.
+```{r}
+t <- 1:n
+plot(t, yahoo$y, type='l')
+```
+
+Thus, let's try k from 2. k=2:
+```{r}
+plot(t, yahoo$y, type='l')
+lin = lm(yahoo$y ~ 1 + t + I(t^2))
+lines(t, lin$fitted.values, col='red')
+```
+k = 3:
+```{r}
+plot(t, yahoo$y, type='l')
+lin = lm(yahoo$y ~ 1 + t + I(t^2) + I(t^3))
+lines(t, lin$fitted.values, col='red')
+```
+k = 4:
+```{r}
+plot(t, yahoo$y, type='l')
+lin = lm(yahoo$y ~ 1 + t + I(t^2) + I(t^3) + I(t^4))
+lines(t, lin$fitted.values, col='red')
+```
+k = 5:
+```{r}
+plot(t, yahoo$y, type='l')
+lin = lm(yahoo$y ~ 1 + t + I(t^2) + I(t^3) + I(t^4) + I(t^5))
+lines(t, lin$fitted.values, col='red')
+```
+I would choose k = 5 because it successfully captures the decreasing trend in the ending part of the data. k = 3 is the second best, but the polynomial goes up at the end, which the actual trend is still going down. Besides, k = 5 overall fits the data better. 
+
+b) On a plot of the observed dataset, plot the polynomial corresponding to the least
+squares estimate for the model with your chosen value of k. On the same figure,
+plot polynomials corresponding to 30 samples from the posterior distribution of
+the coefficients. Comment on the range of uncertainty revealed in this plot. (5
+points)
+
+
+
+
+c) Plot the residuals obtained after fitting your model. Also plot the correlogram of
+the residuals. Is Gaussian White Noise suitable as a model for the residuals? (4
+points)
+
