@@ -186,6 +186,34 @@ squares estimate for the model with your chosen value of k. On the same figure,
 plot polynomials corresponding to 30 samples from the posterior distribution of
 the coefficients. Comment on the range of uncertainty revealed in this plot. (5
 points)
+The posterior $\vec\beta = (\beta_0, ..., \beta_5)^T$ conditioned on data $\vec y$ follows
+$$t_{n-6}\big(\hat\beta, \; \frac{S(\hat\beta)}{n-6}(X'X)^{-1}\big),$$
+where X is now
+$$\begin{bmatrix}
+1 & t_1 & t_1^2 & \cdots & t_1^5 \\
+1 & t_2 & t_2^2 & \cdots & t_2^5 \\
+\vdots & \vdots & \vdots & \vdots & \vdots \\
+1 & t_n & t_n^2 & \cdots & t_n^5
+\end{bmatrix}$$
+
+```{r}
+lin = lm(yahoo$y ~ 1 + t + I(t^2) + I(t^3) + I(t^4) + I(t^5))
+
+beta_hat = as.vector(lin$coefficients)
+S = sum(lin$residuals^2) # residual sum of squares
+X = model.matrix(lin)
+Sigma = S / (n-6) * solve(t(X) %*% X + diag(x=1, nrow=6)) # system is computationally singular: reciprocal condition number = 9.37995e-25
+```
+```{r}
+det(t(X) %*% X) # so large
+```
+
+
+
+```{r}
+plot(t, yahoo$y, type='l')
+lines(t, lin$fitted.values, col='blue')
+```
 
 
 
@@ -193,4 +221,56 @@ points)
 c) Plot the residuals obtained after fitting your model. Also plot the correlogram of
 the residuals. Is Gaussian White Noise suitable as a model for the residuals? (4
 points)
+```{r}
+plot(t, lin$residuals, type='l')
+acf(lin$residuals)
+```
+Since the acf has a visible pattern (a decreasing trend in the beginning), Gaussian White Noise is not suitable as a model for the residuals. Otherwise, the autocorrelations should be approximately iid normal and so should not have a visible trend. 
+
+# 5
+Download the google trends time series dataset for the query frisbee. This should be
+a monthly time series dataset that indicates the search popularity of this query from
+January 2004 to August 2022.
+## a
+Describe a model that is appropriate for estimating the trend in this dataset.
+Explain how you arrived at your model. (4 points)
+```{r}
+fris <- read.csv('frisbee.csv', header=T, skip=1)
+colnames(fris) = c('Month', 'y')
+fris <- fris[1:(nrow(fris)-1), ] # drop last row, which corresponds to Sep 2022
+head(fris)
+n = length(fris$y) # number of timepoints
+
+fris.ts <- ts(fris$y, start = c(2004, 1), end = c(2022, 8), frequency = 12)
+```
+If we plot the frisbee time series, we can already see a strong seasonal oscillation and guess that the period of the oscillation is a year. This guess can be supported from the acf plot. The peaks of autocorrelation at lag k occur when k is a multiple of 12, which suggests that the data points versus those that shift 12 months ahead are in phase and so 12 is likely to be the period. 
+```{r}
+t <- 1:n
+#plot(t, fris$y, type='l')
+plot(fris.ts)
+acf(fris$y, lag.max=30)
+```
+Thus, I will use the following model to fit the time series:
+$$y_i = \beta_0 + \beta_1 t_i + \beta_2 t_i^2 + \beta_3 \cos(2\pi t_i/12) + \beta_4 \sin(2\pi t_i/12) + z_i,$$
+where the $z_i$'s are iid following $N(0, \sigma^2)$. The quadratic part $\beta_0 + \beta_1 t_i + \beta_2 t_i^2$ models ...
+
+```{r, include=F}
+k = 12
+plot(fris$y[1:20], fris$y[(1+k):(20+k)], pch=20)
+```
+
+```{r}
+
+```
+
+
+## b
+Estimate the trend in this dataset by fitting your model. Quantify the uncertainty
+in your trend estimation. Explain your methodology briefly (5 points).
+
+##c
+Plot the residuals obtained after fitting your model. Also plot the correlogram of
+the residuals. Is Gaussian White Noise suitable as a model for the residuals? (4
+points)
+
 
