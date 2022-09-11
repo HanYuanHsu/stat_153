@@ -252,15 +252,11 @@ acf(fris$y, lag.max=30)
 ```
 Thus, I will use the following model to fit the time series:
 $$y_i = \beta_0 + \beta_1 t_i + \beta_2 t_i^2 + \beta_3 \cos(2\pi t_i/12) + \beta_4 \sin(2\pi t_i/12) + z_i,$$
-where the $z_i$'s are iid following $N(0, \sigma^2)$. The quadratic part $\beta_0 + \beta_1 t_i + \beta_2 t_i^2$ models ...
+where the $z_i$'s are iid following $N(0, \sigma^2)$. The quadratic part $\beta_0 + \beta_1 t_i + \beta_2 t_i^2$ models the long-term trend, while the cos and sin model the oscillation.
 
 ```{r, include=F}
 k = 12
 plot(fris$y[1:20], fris$y[(1+k):(20+k)], pch=20)
-```
-
-```{r}
-
 ```
 
 
@@ -268,9 +264,66 @@ plot(fris$y[1:20], fris$y[(1+k):(20+k)], pch=20)
 Estimate the trend in this dataset by fitting your model. Quantify the uncertainty
 in your trend estimation. Explain your methodology briefly (5 points).
 
+Since the model is linear in the parameters, use linear regression to get the least square estimate of $\vec\beta$.
+```{r}
+t <- 1:n
+c <- cos(2*pi/12*t)
+s <- sin(2*pi/12*t)
+my.model <- lm(fris$y ~ 1 + t + I(t^2) + c + s)
+summary(my.model)
+```
+
+
+
+The posterior $\vec\beta = (\beta_0, ..., \beta_4)^\text{T}$ conditioned on data $\vec y$ follows
+$$t_{n-5}\big(\hat\beta, \; \frac{S(\hat\beta)}{n-5}(X'X)^{-1}\big),$$
+where X is
+$$\begin{bmatrix}
+1 & t_1 & t_1^2 & \cos(2\pi t_1/12) & \sin(2\pi t_1/12) \\
+\vdots & \vdots & \vdots & \vdots & \vdots \\
+1 & t_n & t_n^2 & \cos(2\pi t_n/12) & \sin(2\pi t_n/12)
+\end{bmatrix}$$
+
+Thus, each $\beta_i$ follows $t_{n-5}\big(\hat\beta_i, \; \frac{S(\hat\beta)}{n-5}((X'X)^{-1})_{ii}\big)$, and we can get a 95% confidence interval for it from this t distribution.
+
+```{r}
+bhat = as.vector(my.model$coefficients)
+S = sum(my.model$residuals^2) # residual sum of squares
+X = model.matrix(my.model)
+Sigma = S / (n-5) * solve(t(X) %*% X)
+```
+```{r, include=FALSE}
+samples <- get_random_t(N=1000, mu=bhat, Sigma=Sigma, df=n-5)
+distances <- apply(samples, MARGIN=1, FUN=function(row){sum((row-bhat)^2)})
+```
+
+```{r}
+for(i in 1:5) {
+  conf_int = c(bhat[i] + sqrt(Sigma[i,i])*qt(p=.025, df=n-5), bhat[i] + sqrt(Sigma[i,i])*qt(p=.975, df=n-5))
+  print(sprintf('CI for beta hat %i: (%f, %f)', i-1, conf_int[1], conf_int[2]))
+}
+```
+
+```{r, include=T}
+bhat0 = as.numeric(my.model$coefficients[1])
+bhat1 = as.numeric(my.model$coefficients[2])
+bhat2 = as.numeric(my.model$coefficients[3])
+plot(t, fris$y, type='l')
+lines(t, bhat0 + bhat1*t + bhat2*t^2, col='red')
+lines(t, my.model$fitted.values, col='blue')
+```
+
+
+
 ##c
 Plot the residuals obtained after fitting your model. Also plot the correlogram of
 the residuals. Is Gaussian White Noise suitable as a model for the residuals? (4
 points)
+```{r}
+plot(t, my.model$residuals, type='l', main='Residuals')
+acf(my.model$residuals, lag.max=30)
+```
+No, Gaussian White Noise is still not a suitable model for the residuals, as there are still peaks at multiples of 12 and smaller ones at multiples of 6. Adding $\cos(2\pi m t_i/12)$ and $\sin(2\pi m t_i/12)$ into the model, where $m = 2,3,4, ...$, may help cancel out the peaks. After all, the shape of the oscillation graph need not look perfectly sinusoidal, and it is known that any continuous periodic function
+can be approximated by many sinusoids of the form $\cos(2\pi m t_i/12)$ and $\sin(2\pi m t_i/12)$.
 
 
