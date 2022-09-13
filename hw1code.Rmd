@@ -179,40 +179,62 @@ plot(t, yahoo$y, type='l')
 lin = lm(yahoo$y ~ 1 + t + I(t^2) + I(t^3) + I(t^4) + I(t^5))
 lines(t, lin$fitted.values, col='red')
 ```
-I would choose k = 5 because it successfully captures the decreasing trend in the ending part of the data. k = 3 is the second best, but the polynomial goes up at the end, which the actual trend is still going down. Besides, k = 5 overall fits the data better. 
+I would choose k = 5 because it successfully captures the decreasing trend in the ending part of the data. k = 3 is the second best, but the polynomial goes up at the end, which the actual trend is still going down. Besides, k = 5 overall fits the data better. \\
+Update: it turns out if I choose k = 5, R will not be able to invert the matrix $(X'X)$ because its entries, which involve numbers being raised to the k^th power, are too large. After reading the GSI's response on Ed, I learned that k = 3 will be better. It is the second best fit among the plots above and it is less vulnerable to overfitting. After all, a model with a trend of a high-degree polynomial will not do well on forecasting - the model will soar to infinity very fast, while our common sense tells us that the trend should remain bounded for a long period of time. So, we will use k = 3 from now on.
 
-b) On a plot of the observed dataset, plot the polynomial corresponding to the least
+## b
+On a plot of the observed dataset, plot the polynomial corresponding to the least
 squares estimate for the model with your chosen value of k. On the same figure,
 plot polynomials corresponding to 30 samples from the posterior distribution of
-the coefficients. Comment on the range of uncertainty revealed in this plot. (5
-points)
-The posterior $\vec\beta = (\beta_0, ..., \beta_5)^T$ conditioned on data $\vec y$ follows
-$$t_{n-6}\big(\hat\beta, \; \frac{S(\hat\beta)}{n-6}(X'X)^{-1}\big),$$
+the coefficients. Comment on the range of uncertainty revealed in this plot. (5 points)
+
+The posterior $\vec\beta = (\beta_0, ..., \beta_3)^T$ conditioned on data $\vec y$ follows
+$$t_{n-4}\big(\hat\beta, \; \frac{S(\hat\beta)}{n-4}(X'X)^{-1}\big),$$
 where X is now
 $$\begin{bmatrix}
-1 & t_1 & t_1^2 & \cdots & t_1^5 \\
-1 & t_2 & t_2^2 & \cdots & t_2^5 \\
-\vdots & \vdots & \vdots & \vdots & \vdots \\
-1 & t_n & t_n^2 & \cdots & t_n^5
+1 & t_1 & t_1^2 & t_1^3 \\
+1 & t_2 & t_2^2 &  t_2^3 \\
+\vdots & \vdots & \vdots & \vdots \\
+1 & t_n & t_n^2 & t_n^3
 \end{bmatrix}$$
 
-```{r}
+```{r, include=F}
+# k=5 case
 lin = lm(yahoo$y ~ 1 + t + I(t^2) + I(t^3) + I(t^4) + I(t^5))
 
 beta_hat = as.vector(lin$coefficients)
 S = sum(lin$residuals^2) # residual sum of squares
 X = model.matrix(lin)
 Sigma = S / (n-6) * solve(t(X) %*% X + diag(x=1, nrow=6)) # system is computationally singular: reciprocal condition number = 9.37995e-25
+det(t(X) %*% X) # so large, like 10^67
 ```
+
 ```{r}
-det(t(X) %*% X) # so large
+lin = lm(yahoo$y ~ 1 + t + I(t^2) + I(t^3))
+
+beta_hat = as.vector(lin$coefficients)
+S = sum(lin$residuals^2) # residual sum of squares
+X = model.matrix(lin)
+Sigma = S / (n-4) * solve(t(X) %*% X)
 ```
 
-
-
+In the following plot, the red polynomial curve corresponds to the least square estimate, whereas
+the other 30 pink curves are polynomials whose coefficients are sampled from the posterior distribution.
 ```{r}
 plot(t, yahoo$y, type='l')
-lines(t, lin$fitted.values, col='blue')
+beta_samples <- get_random_t(N=30, mu=beta_hat, Sigma=Sigma, df=n-4)
+for(i in 1:30) {
+  y_model = lapply(t, function(x) {
+    sum(beta_samples[i, ] * c(1, x, x^2, x^3))
+  })
+  lines(t, y_model, col='pink')
+}
+lines(t, lin$fitted.values, col='red')
+```
+Reason is 3b.
+```{r}
+Sigma
+beta_hat
 ```
 
 
