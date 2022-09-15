@@ -28,7 +28,7 @@ Interpret your point estimates and explain why they make sense. (4 points)
 
 Our model is $Y_i = \beta_0 + \beta_1 t_i + Z_i$. The point estimates of $\beta_0$ and $\beta_1$ are $\hat\beta_0$ and $\hat\beta_1$, which are obtained from the lm function.
 ```{r}
-t <- 1:length(n)
+t <- 1:n
 lin <- lm(df$CAPOP ~ 1 + t)
 summary(lin)
 ```
@@ -200,13 +200,13 @@ $$\begin{bmatrix}
 
 ```{r, include=F}
 # k=5 case
-lin = lm(yahoo$y ~ 1 + t + I(t^2) + I(t^3) + I(t^4) + I(t^5))
+#lin = lm(yahoo$y ~ 1 + t + I(t^2) + I(t^3) + I(t^4) + I(t^5))
 
-beta_hat = as.vector(lin$coefficients)
-S = sum(lin$residuals^2) # residual sum of squares
-X = model.matrix(lin)
-Sigma = S / (n-6) * solve(t(X) %*% X + diag(x=1, nrow=6)) # system is computationally singular: reciprocal condition number = 9.37995e-25
-det(t(X) %*% X) # so large, like 10^67
+#beta_hat = as.vector(lin$coefficients)
+#S = sum(lin$residuals^2) # residual sum of squares
+#X = model.matrix(lin)
+#Sigma = S / (n-6) * solve(t(X) %*% X + diag(x=1, nrow=6)) # system is computationally singular: reciprocal condition number = 9.37995e-25
+#det(t(X) %*% X) # so large, like 10^67
 ```
 
 ```{r}
@@ -231,14 +231,14 @@ for(i in 1:30) {
 }
 lines(t, lin$fitted.values, col='red')
 ```
-Reason is 3b.
+The range of uncertainty is still pretty tight. The reason is the same as in 3b. We can calculate the 95% confidence intervals for $\beta_0, ..., \beta_3$ as follows:
 ```{r}
-Sigma
-beta_hat
+c(beta_hat[1] - 1.96*sqrt(Sigma[1,1]), beta_hat[1] + 1.96*sqrt(Sigma[1,1]))
+c(beta_hat[2] - 1.96*sqrt(Sigma[2,2]), beta_hat[2] + 1.96*sqrt(Sigma[2,2]))
+c(beta_hat[3] - 1.96*sqrt(Sigma[3,3]), beta_hat[3] + 1.96*sqrt(Sigma[3,3]))
+c(beta_hat[4] - 1.96*sqrt(Sigma[4,4]), beta_hat[4] + 1.96*sqrt(Sigma[4,4]))
 ```
-
-
-
+We see that except for the CI for $\beta_0$, the other CIs are pretty tight. The intercept is allowed to change more because it only shifts the model curve vertically, but changing other betas may change the shape of the curve dramatically, so their range of uncertainty must be small. 
 
 c) Plot the residuals obtained after fitting your model. Also plot the correlogram of
 the residuals. Is Gaussian White Noise suitable as a model for the residuals? (4
@@ -247,7 +247,7 @@ points)
 plot(t, lin$residuals, type='l')
 acf(lin$residuals)
 ```
-Since the acf has a visible pattern (a decreasing trend in the beginning), Gaussian White Noise is not suitable as a model for the residuals. Otherwise, the autocorrelations should be approximately iid normal and so should not have a visible trend. 
+Since the acf has a visible decreasing pattern and many acfs are above the blue threshold, Gaussian White Noise is not suitable as a model for the residuals. Otherwise, the autocorrelations should be approximately iid normal and so should not have a visible trend (also, I believe most acfs will lie within the blue thresholds if the residuals were to follow a Gaussian White Noise model).
 
 # 5
 Download the google trends time series dataset for the query frisbee. This should be
@@ -326,7 +326,7 @@ for(i in 1:5) {
 }
 ```
 
-```{r, include=T}
+```{r, include=F}
 bhat0 = as.numeric(my.model$coefficients[1])
 bhat1 = as.numeric(my.model$coefficients[2])
 bhat2 = as.numeric(my.model$coefficients[3])
