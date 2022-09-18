@@ -44,7 +44,7 @@ log.post.c <- function(c) {
   X = matrix(1, nrow = n, ncol = 2)
   X[,2] = (t > c)
   #bhat = solve(t(X) %*% X) %*% t(X) %*% y
-  mod = lm(y ~ X[,2])
+  mod = lm(y ~ 1 + X[,2])
   # log of posterior pdf of c
   log.post = (ncol(X) - n)/2*log(sum(mod$residuals^2)) - 0.5*log(det(t(X) %*% X))
   log.post
@@ -87,6 +87,44 @@ c(c.est-d, c.est+d)
 ## b
 Provide point estimates and 95% marginal uncertainty intervals for the prechangepoint
 mean level $\mu_0 := \beta_0$ and the post-changepoint mean level $\mu_1 := \beta_0 + \beta_1$ (4 points).
+
+```{r}
+post.pmf = values / sum(values)
+#plot(c.vals, post.pmf, type='l')
+```
+
+
+```{r}
+library(mvtnorm)
+N = 2000 #number of posterior samples
+post.samples = matrix(-1, N, 3)
+post.samples[,1] = sample(c.vals, N, replace = T, prob = post.pmf)
+for(i in 1:N)
+{
+    cp = post.samples[i,1] # changepoint
+    
+    # below, we sample one mu_0 and one mu_1 from the appropriate t distribution.
+    # mu_samples is c(mu_0, mu_1)
+    X = matrix(1, nrow = n, ncol = 2)
+    X[,2] = (t > cp)
+    lin.model = lm(y ~ 1 + X[,2])
+    bhat = lin.model$coefficients
+    sighat = sqrt((sum((lin.model$residuals)^2))/(n-2)) #this is also denoted by the Residual Standard Error
+    Sigma.mat = (sighat^2)*solve(t(X) %*% X)
+    chiran = (rchisq(1, df = n-2))
+    mu.samples = bhat + (rmvnorm(1, sigma = Sigma.mat))/(sqrt(chiran/(n-2)))
+    mu.samples[2] = mu.samples[1] + mu.samples[2]
+    
+    post.samples[i,2:3] = mu.samples
+}
+```
+
+```{r}
+summary(post.samples[, 2])
+summary(post.samples[, 3])
+```
+
+
 
 ## c
 Comment on whether (2) is a good model for this dataset. (2 points)
