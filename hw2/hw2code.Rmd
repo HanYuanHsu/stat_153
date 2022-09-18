@@ -1,0 +1,92 @@
+---
+title: "hw2code"
+author: "Han-Yuan Hsu"
+date: '2022-09-18'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+set.seed(111)
+```
+Reference: lecture code.
+
+# 3
+Download the Google Trends Data (for the United States) for the query mask. This
+should be a monthly time series dataset that indicates the search popularity of this
+query from January 2004 to September 2022. To this data, fit the single change point
+model:
+$$Y_t = \beta_0 + \beta_1 I\{t>c\} + Z_t,$$
+where $Z_t$ are iid following $N(0, \sigma^2)$.
+
+```{r}
+mask <- read.csv('mask.csv', skip=1, header=T)
+head(mask)
+```
+```{r}
+n <- nrow(mask) # time series length, 225
+t <- 1:n
+y <- mask[,2] # values of the time series
+```
+
+## a
+Provide a point estimate and 95% uncertainty interval for the changepoint parameter
+c. Explain whether your answers make intuitive sense in the context of
+this dataset (4 points).
+
+For the prior of our model, $\beta_0, \beta_1, \log(\sigma), c$ are independent; $\beta_0, \beta_1, \log(\sigma)$ follow $\text{Unif}([-C, C])$, where C is large; and the changepoint $c$ is a discrete random variable and follows the uniform distribution on $\{3, 4, 5, ..., n-3\}$.
+
+The following function, `log.post.c`, calculates the log of the posterior PMF of c (not normalized).
+```{r}
+log.post.c <- function(c) {
+  X = matrix(1, nrow = n, ncol = 2)
+  X[,2] = (t > c)
+  #bhat = solve(t(X) %*% X) %*% t(X) %*% y
+  mod = lm(y ~ X[,2])
+  # log of posterior pdf of c
+  log.post = (ncol(X) - n)/2*log(sum(mod$residuals^2)) - 0.5*log(det(t(X) %*% X))
+  log.post
+}  
+```
+
+Below, `values` is the vector of the posterior distribution of c, again not normalized:
+```{r}
+c.vals <- c(3:(n-3))
+log.values <- as.numeric(lapply(c.vals, FUN=log.post.c))
+log.values <- log.values - max(log.values)
+values <- exp(log.values)
+```
+
+Below, `c.est` is the point estimate of c (maximum a posteriori estimator):
+```{r}
+ind.max = which.max(log.values)
+c.est <- c.vals[ind.max]
+print(c.est)
+```
+We can plot where `c.est` is (the red line):
+```{r}
+plot(t/12 + 2004, y, type='l')
+abline(v=c.est/12 + 2004, col='red')
+```
+The estimated changepoint is located right before the spike when Covid broke out and drastically increased the number of searches for "mask", so the estimated changepoint does make sense. 
+
+The code below calculates a 95% confidence interval centered at `c.est`:
+```{r}
+total = sum(values)
+d = 1
+conf.total = values[c.est]
+while(conf.total <= .95 * total) {
+  conf.total <- conf.total + values[c.est-d] + values[c.est+d]
+  d <- d + 1
+}
+c(c.est-d, c.est+d)
+```
+
+## b
+Provide point estimates and 95% marginal uncertainty intervals for the prechangepoint
+mean level $\mu_0 := \beta_0$ and the post-changepoint mean level $\mu_1 := \beta_0 + \beta_1$ (4 points).
+
+## c
+Comment on whether (2) is a good model for this dataset. (2 points)

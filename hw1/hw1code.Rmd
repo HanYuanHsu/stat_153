@@ -8,7 +8,7 @@ output: pdf_document
 set.seed(111)
 ```
 
-#3
+# 3
 Download the dataset on the annual size of the Resident Population of California
 from https://fred.stlouisfed.org/series/CAPOP. This dataset gives the annual
 population of California from 1900 to 2021 (units are in thousands of persons and there
@@ -23,7 +23,7 @@ n = length(df$DATE) # number of timepoints, 122
 ```
 
 ## a
-Provide point estimates for β0, β1 along with appropriate uncertainty intervals.
+Provide point estimates for $\beta_0$, $\beta_1$ along with appropriate uncertainty intervals.
 Interpret your point estimates and explain why they make sense. (4 points)
 
 Our model is $Y_i = \beta_0 + \beta_1 t_i + Z_i$. The point estimates of $\beta_0$ and $\beta_1$ are $\hat\beta_0$ and $\hat\beta_1$, which are obtained from the lm function.
@@ -41,12 +41,12 @@ plot(t, df$CAPOP, type='l', col='blue')
 lines(t, lin$fitted.values, col='red')
 ```
 
-##b
+## b
 Along with a plot of the observed dataset, plot lines corresponding to 30 samples
-from the posterior distribution of (β0, β1). Comment on the range of uncertainty
+from the posterior distribution of $(\beta_0, \beta_1)$. Comment on the range of uncertainty
 revealed in this plot. (4 points)
 
-From lecture, we know the posterior (β0, β1) follows
+From lecture, we know the posterior $(\beta_0, \beta_1)$ follows
 $$t_{n-2}\big(\hat\beta, \; \frac{S(\hat\beta)}{n-2}(X'X)^{-1}\big).$$
 ```{r}
 beta_hat = as.vector(lin$coefficients)
@@ -87,7 +87,7 @@ apply(A, MARGIN=1, FUN=function(row){row+c(1,1,1)}) # why is this transposed?
 A
 ```
 
-##c
+## c
 Using the results of Problem 2, provide a point estimate along with appropriate
 uncertainty quantification of the Resident Annual Population of California for the
 year 2025. Comment on whether your answer makes intuitive sense. (5 points)
@@ -123,22 +123,24 @@ sqrt(sigma_hat_squared)
 
 
 
-##d
+## d
 Discuss the appropriateness of the linear trend model for this dataset. Can you
 think of any alternative models that would perhaps be more appropriate for this
 dataset? (4 points).
+
 It is not really appropriate to assume the population growth follows the linear model  because in reality, the growth rate of the population is affected by the events happening to the world at various time points. Since we can see from the actual trend that the slope before the 1940s is smaller and yet the slope after that gets larger, I would fit a piecewise linear model instead. I guess that increase of slope is due to baby boom after WW2?
 
-#4
+# 4
 Download the google trends time series dataset for the query yahoo. This should be
 a monthly time series dataset that indicates the search popularity of this query from
 January 2004 to August 2022. The goal of this exercise is to fit the polynomial trend
 model
 $$Y_i = \beta_0 + \beta_1 t_i + \cdots + \beta_k t_i^k + Z_i$$
 with $Z_i$ iid $\sim N(0, \sigma^2)$ to this data set for an appropriate value of k $\leq$ 5.
-##a
+
+## a
 Visually evaluate the fit of the least squares estimate for this model to the observed
-data to pick an appropriate value of k ≤ 5. Explain the reason for your choice of
+data to pick an appropriate value of k $\leq$ 5. Explain the reason for your choice of
 k. (4 points).
 ```{r}
 yahoo <- read.csv('yahoo.csv', header=T, skip=1)
@@ -179,8 +181,9 @@ plot(t, yahoo$y, type='l')
 lin = lm(yahoo$y ~ 1 + t + I(t^2) + I(t^3) + I(t^4) + I(t^5))
 lines(t, lin$fitted.values, col='red')
 ```
-I would choose k = 5 because it successfully captures the decreasing trend in the ending part of the data. k = 3 is the second best, but the polynomial goes up at the end, which the actual trend is still going down. Besides, k = 5 overall fits the data better. \\
-Update: it turns out if I choose k = 5, R will not be able to invert the matrix $(X'X)$ because its entries, which involve numbers being raised to the k^th power, are too large. After reading the GSI's response on Ed, I learned that k = 3 will be better. It is the second best fit among the plots above and it is less vulnerable to overfitting. After all, a model with a trend of a high-degree polynomial will not do well on forecasting - the model will soar to infinity very fast, while our common sense tells us that the trend should remain bounded for a long period of time. So, we will use k = 3 from now on.
+I would choose k = 5 because it successfully captures the decreasing trend in the ending part of the data. k = 3 is the second best, but the polynomial goes up at the end, which the actual trend is still going down. Besides, k = 5 overall fits the data better.
+
+Update: it turns out if I choose k = 5, R will not be able to invert the matrix $X'X$ because its entries, which involve numbers being raised to the k^th power, are too large. After reading the GSI's response on Ed, I learned that k = 3 will be better. It is the second best fit among the plots above and it is less vulnerable to overfitting. After all, a model with a trend of a high-degree polynomial will not do well on forecasting - the model will soar to infinity very fast, while our common sense tells us that the trend should remain bounded for a long period of time. So, we will use k = 3 from now on.
 
 ## b
 On a plot of the observed dataset, plot the polynomial corresponding to the least
@@ -240,7 +243,8 @@ c(beta_hat[4] - 1.96*sqrt(Sigma[4,4]), beta_hat[4] + 1.96*sqrt(Sigma[4,4]))
 ```
 We see that except for the CI for $\beta_0$, the other CIs are pretty tight. The intercept is allowed to change more because it only shifts the model curve vertically, but changing other betas may change the shape of the curve dramatically, so their range of uncertainty must be small. 
 
-c) Plot the residuals obtained after fitting your model. Also plot the correlogram of
+## c
+Plot the residuals obtained after fitting your model. Also plot the correlogram of
 the residuals. Is Gaussian White Noise suitable as a model for the residuals? (4
 points)
 ```{r}
@@ -253,6 +257,7 @@ Since the acf has a visible decreasing pattern and many acfs are above the blue 
 Download the google trends time series dataset for the query frisbee. This should be
 a monthly time series dataset that indicates the search popularity of this query from
 January 2004 to August 2022.
+
 ## a
 Describe a model that is appropriate for estimating the trend in this dataset.
 Explain how you arrived at your model. (4 points)
@@ -321,7 +326,8 @@ distances <- apply(samples, MARGIN=1, FUN=function(row){sum((row-bhat)^2)})
 
 ```{r}
 for(i in 1:5) {
-  conf_int = c(bhat[i] + sqrt(Sigma[i,i])*qt(p=.025, df=n-5), bhat[i] + sqrt(Sigma[i,i])*qt(p=.975, df=n-5))
+  conf_int = c(bhat[i] + sqrt(Sigma[i,i])*qt(p=.025, df=n-5), 
+               bhat[i] + sqrt(Sigma[i,i])*qt(p=.975, df=n-5))
   print(sprintf('CI for beta hat %i: (%f, %f)', i-1, conf_int[1], conf_int[2]))
 }
 ```
@@ -337,7 +343,7 @@ lines(t, my.model$fitted.values, col='blue')
 
 
 
-##c
+## c
 Plot the residuals obtained after fitting your model. Also plot the correlogram of
 the residuals. Is Gaussian White Noise suitable as a model for the residuals? (4
 points)

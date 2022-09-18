@@ -20,8 +20,16 @@ x2 = sin(tme*freq)
 md = lm(sunspots[,2] ~ x1 + x2)
 summary(md)
 
+freq.alt = (2*pi*(1/10.5))
+x1 = cos(tme*freq.alt)
+x2 = sin(tme*freq.alt)
+md1 = lm(sunspots[,2] ~ x1 + x2)
+summary(md)
+
 plot(tme, sunspots[,2], xlab = "Year (1700 to 2021)", ylab = "Yearly Sunspot Numbers", type = "l", main = "Sunspot Data")
 points(tme, md$fitted.values, type = "l", col = "red")
+points(tme, md1$fitted.values, type = "l", col = "blue")
+
 #The fit seems reasonable though not great. The following questions naturally arise here. What about other values of frequency? How about 10.5 year cycle or 11.5 year cycle? Do these periods also fit the data equally well? How was the approximate 11 year period determined in the first place? What is the uncertainty in this approximation?
 #To answer these questions, it makes sense to work with a model with unknown frequency omega. This is however a nonlinear regression model. 
 
@@ -30,7 +38,7 @@ n = length(tme)
 grid.res = 0.001
 omga.val = seq(0.001, pi, grid.res)
 X = matrix(1, nrow = n, ncol = 3)
-expos.unknown.sigma = rep(-1, length(omga.val)) #exact posterior with known sigma
+expos = rep(-1, length(omga.val)) #exact marginal posterior for omega
 log.values = rep(-1, length(omga.val))
 log.det.term = rep(-1, length(omga.val))
 for(i in 1:length(omga.val))
@@ -43,12 +51,12 @@ for(i in 1:length(omga.val))
     log.values[i] = log.value
 }
 log.values = log.values - max(log.values) #scaling to remove large values 
-expos.unknown.sigma = exp(log.values)
-expos.unknown.sigma = (expos.unknown.sigma/sum(expos.unknown.sigma))/grid.res
-plot(omga.val, expos.unknown.sigma, type = "l")
+expos = exp(log.values)
+expos = (expos/sum(expos))/grid.res
+plot(omga.val, expos, type = "l")
 
 #The posterior is quite peaked. We can get a point estimate by the frequency which maximizes the posterior: 
-ind.max = which.max(expos.unknown.sigma)
+ind.max = which.max(expos)
 est.freq = omga.val[ind.max] #posterior maximizer
 est.freq
 #This corresponds to the following estimate of the period: 
@@ -67,7 +75,7 @@ points(tme, mod$fitted.values, type = "l", col = "red")
 #We can also construct at uncertainty intervals containing say 95% of posterior mass (these are called credible intervals):  
 postmass = function(s)
 {
-   return((sum(expos.unknown.sigma[(ind.max - s) : (ind.max + s)]))*grid.res)
+   return((sum(expos[(ind.max - s) : (ind.max + s)]))*grid.res)
 }
 lapply(1:10, postmass)
 s = 2
@@ -76,10 +84,10 @@ c(omga.val[ind.max - s], omga.val[ind.max + s])
 c((2*pi)/(omga.val[ind.max + s]), (2*pi)/(omga.val[ind.max - s]))
 
 #We can also look at the posterior mean and standard deviation: 
-pm = (sum(omga.val*expos.unknown.sigma))*grid.res
+pm = (sum(omga.val*expos))*grid.res
 pm
 #Posterior standard deviation:
-psd = sqrt((sum(((omga.val - pm)^2)*expos.unknown.sigma))*grid.res)
+psd = sqrt((sum(((omga.val - pm)^2)*expos))*grid.res)
 psd
 c(pm - 2*psd, pm + 2*psd)
 #corresponds to the following interval for the period: 
@@ -100,7 +108,8 @@ points(tme, mod2$fitted.values, type = "l", col = "blue")
 
 #Approximate Computation (checking whether the X^T X matrix is diagonal)
 omag = 1
-omag = 2*pi*(45/n) #Fourier Frequency
+k = 45
+omag = 2*pi*(k/n) #Fourier Frequency
 omag = 2*pi*(45.5/n)
 X = matrix(1, nrow = n, ncol = 3)
 X[,2] = cos(omag*tme)
