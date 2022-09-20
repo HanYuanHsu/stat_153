@@ -88,17 +88,25 @@ c(c.est-d, c.est+d)
 Provide point estimates and 95% marginal uncertainty intervals for the prechangepoint
 mean level $\mu_0 := \beta_0$ and the post-changepoint mean level $\mu_1 := \beta_0 + \beta_1$ (4 points).
 
+Let's first normalize `values` so that below, `post.pmf` is really the vector of the posterior distribution of c:
 ```{r}
 post.pmf = values / sum(values)
 #plot(c.vals, post.pmf, type='l')
 ```
 
+We will create N=2000 iid samples of the posterior $(\vec\beta, c)$. We achieve that by the posterior distribution of c and the distribution of $\vec\beta$ conditioned on the data $\vec y$ and $c$. We already know the posterior distribution of c from part a. We can also derive the distribution of $\vec\beta \, |\, \vec y, c$ as follows: the model becomes linear in $\vec\beta$ when $c$ is fixed, and moreover, the prior distribution of $\vec\beta, \log\sigma$ conditioned on $c$ is still uniform because $c$ is assumed to be independent of $\vec\beta, \log\sigma$. Hence we can directly apply the results for linear models we learned in previous lectures and conclude that $\vec\beta \, |\, \vec y, c$ follows the multivariate t distribution
+$$t_{n-2}\big(\hat\beta, \; \hat\sigma^2(X'X)^{-1}\big).$$
+Note the parameters $\hat\beta$ and $\hat\sigma^2(X'X)^{-1}\big$ now depend on $c$. 
+
+Thus, if a random variable C follows the distribution of the posterior c and a random vector $\vec B$ follows the multivariate t distribution above (which depends on C), then the joint, $(\vec B, C)$, will follow the distribution of the desired posterior $(\vec\beta, c)$ by the product rule of probability distributions.
+
+The following code implements these ideas. `post.samples` is a matrix of the samples of $(c, \mu_0, \mu_1)$, where $\mu_0=\beta_0$ and $\mu_1=\beta_0+\beta_1$.
 
 ```{r}
 library(mvtnorm)
 N = 2000 #number of posterior samples
 post.samples = matrix(-1, N, 3)
-post.samples[,1] = sample(c.vals, N, replace = T, prob = post.pmf)
+post.samples[,1] = sample(c.vals, N, replace = T, prob = post.pmf) # iid samples of posterior c
 for(i in 1:N)
 {
     cp = post.samples[i,1] # changepoint
@@ -119,12 +127,42 @@ for(i in 1:N)
 }
 ```
 
+
 ```{r}
 summary(post.samples[, 2])
 summary(post.samples[, 3])
+var(post.samples[, 2])
 ```
 
+CI??????????????????????????????????????
+
+```{r}
+1/sqrt(.288*.05*225) # for chebyshev inequality CI
+```
+```{r}
+quantile(post.samples[, 2], c(.025, .975))
+```
 
 
 ## c
 Comment on whether (2) is a good model for this dataset. (2 points)
+
+The changepoint model is not a good. After the huge spike in 2020, the values doesn't stay near a hypothetical mean but rather decrease. In other words, the model assumes the queries for "mask" will stay high forever since 2020, but in reality, we know that the spike was caused by Covid and the epidemic is getting alleviated, which will bring the interest for masks down. A skewed Gaussian model with the mode being an unknown parameter is a better model. 
+
+# 4
+Download the Google Trends Data (for the United States) for the query golf. This
+should be a monthly time series dataset that indicates the search popularity of this
+query from January 2004 to September 2022. To this data, fit the model:
+$$Y_t = \beta_0 + \beta_1 t + \beta_2 t^2 + \beta_3 \cos(2\pi ft) + \beta_4 \sin(2\pi ft) + Z_t$$
+with $Z_t$ iid following $N(0, \sigma^2)$.
+
+a) Provide a point estimate and a 95% uncertainty interval for the unknown frequency
+parameter f. (4 points)
+2
+b) On a scatter plot of the data, plot your best estimate of the fitted function:
+$$t \mapsto \beta_0 + \beta_1 t + \beta_2 t^2 + \beta_3 \cos(2\pi ft) + \beta_4 \sin(2\pi ft)$$
+along with appropriate uncertainty quantification. (5 points).
+
+c) Comment on whether model (3) is appropriate for this dataset. (2 points).
+
+
