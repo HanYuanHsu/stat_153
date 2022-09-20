@@ -147,7 +147,7 @@ quantile(post.samples[, 2], c(.025, .975))
 ## c
 Comment on whether (2) is a good model for this dataset. (2 points)
 
-The changepoint model is not a good. After the huge spike in 2020, the values doesn't stay near a hypothetical mean but rather decrease. In other words, the model assumes the queries for "mask" will stay high forever since 2020, but in reality, we know that the spike was caused by Covid and the epidemic is getting alleviated, which will bring the interest for masks down. A skewed Gaussian model with the mode being an unknown parameter is a better model. 
+The changepoint model is not a good. After the huge spike in 2020, the values don't stay near a hypothetical mean but rather decrease. In other words, the model assumes the queries for "mask" will stay high forever since 2020, but in reality, we know that the spike was caused by Covid and the epidemic is getting alleviated, which will bring the interest for masks down. A skewed Gaussian model with the mode being an unknown parameter is a better model. 
 
 # 4
 Download the Google Trends Data (for the United States) for the query golf. This
@@ -156,12 +156,93 @@ query from January 2004 to September 2022. To this data, fit the model:
 $$Y_t = \beta_0 + \beta_1 t + \beta_2 t^2 + \beta_3 \cos(2\pi ft) + \beta_4 \sin(2\pi ft) + Z_t$$
 with $Z_t$ iid following $N(0, \sigma^2)$.
 
+```{r}
+golf <- read.csv('golf.csv', skip=1, header=T)
+head(golf)
+y = golf[,2]
+n = length(y)
+t = 1:n
+```
+```{r}
+plot(t, y, type='l')
+
+n_half = as.integer(n/2)
+pgram = abs(fft(y)[2:50])^2 / n # peaks at 19
+plot(pgram, type='h')
+225/19 # roughly 12. As expected, we have yearly trend
+```
+
+
 a) Provide a point estimate and a 95% uncertainty interval for the unknown frequency
 parameter f. (4 points)
-2
+
+Guess f near 1/12
+
+```{r}
+log.post.f = function(f) {
+  X = matrix(1, nrow=n, ncol=5)
+  X[,2] = t
+  X[,3] = t^2
+  X[,4] = cos(2*pi*f*t)
+  X[,5] = sin(2*pi*f*t)
+  
+  lin.mod = lm(y ~ 1 + X[,2] + X[,3] + X[,4] + X[,5])
+  
+  -log(det(t(X) %*% X))/2 - log(sum((lin.mod$residuals)^2))*(n-5)/2
+}
+```
+
+
+```{r}
+x = seq(10, 14, by=.01)
+plot(1/x, as.numeric(lapply(1/x, FUN=log.post.f)), type='l')
+```
+```{r}
+opt = optimize(log.post.f, interval=c(.080, .085), maximum = T)
+f.hat = opt$maximum
+log.post.f.max = opt$objective
+post.f = function(f) {
+  exp(log.post.f(f) - log.post.f.max)
+}
+```
+```{r}
+1/f.hat # very close to 12
+```
+```{r}
+plot(1/x, as.numeric(lapply(1/x, FUN=post.f)), type='l')
+```
+```{r}
+post.f(1/12) # 1/12 is even better than f.hat, kind of weird
+post.f(f.hat)
+```
+
+
+How to get 95% CI?
+```{r}
+ci.prob = function(d) {
+  
+}
+```
+
+
+
+
 b) On a scatter plot of the data, plot your best estimate of the fitted function:
 $$t \mapsto \beta_0 + \beta_1 t + \beta_2 t^2 + \beta_3 \cos(2\pi ft) + \beta_4 \sin(2\pi ft)$$
 along with appropriate uncertainty quantification. (5 points).
+
+How should I get beta's?
+
+```{r}
+fitted.func = function(t) {
+  
+}
+
+plot(t, y, type='l')
+lines(t, )
+```
+
+
 
 c) Comment on whether model (3) is appropriate for this dataset. (2 points).
 
