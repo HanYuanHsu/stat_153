@@ -172,8 +172,8 @@ plot(pgram, type='h')
 225/19 # roughly 12. As expected, we have yearly trend
 ```
 
-
-a) Provide a point estimate and a 95% uncertainty interval for the unknown frequency
+## a
+Provide a point estimate and a 95% uncertainty interval for the unknown frequency
 parameter f. (4 points)
 
 Guess f near 1/12
@@ -226,8 +226,8 @@ ci.prob = function(d) {
 
 
 
-
-b) On a scatter plot of the data, plot your best estimate of the fitted function:
+## b
+On a scatter plot of the data, plot your best estimate of the fitted function:
 $$t \mapsto \beta_0 + \beta_1 t + \beta_2 t^2 + \beta_3 \cos(2\pi ft) + \beta_4 \sin(2\pi ft)$$
 along with appropriate uncertainty quantification. (5 points).
 
@@ -245,5 +245,100 @@ lines(t, )
 
 
 c) Comment on whether model (3) is appropriate for this dataset. (2 points).
+
+# 5
+Download the FRED dataset on Total Construction Spending in the United States
+from https://fred.stlouisfed.org/series/TTLCONS. This gives monthly seasonally
+adjusted data on total construction spending in the United States in millions of
+dollars from January 1993 to July 2022. To this dataset, fit the model:
+$$Y_t = \beta_0 + \beta_1 t + \beta_2 (t-s_1)_+ + \beta_3 (t-s_2)_+ + Z_t$$
+with $Z_t$ i.i.d ∼ $N(0, \sigma^2)$. 
+
+```{r}
+df = read.csv('TTLCONS.csv')
+y = df$TTLCONS
+n = length(y)
+```
+```{r}
+plot(1:n, y, type='l')
+```
+
+
+## a
+Provide point estimates and 95% uncertainty intervals for the change of slope
+parameters $s_1$ and $s_2$. (5 points)
+
+For the prior of our model, $\beta_0, \beta_1, \log(\sigma)$ and the random vector $\vec s = (s_1, s_2)$ are independent; $\beta_0, \beta_1, \log(\sigma)$ follow $\text{Unif}([-C, C])$, where C is large; and $\vec s$ is a discrete random vector following the uniform distribution on
+$$\{ (s_1, s_2) \in \mathbb{N}^2: \; 3 \leq s_1 < s_2 \leq n-3\}.$$
+
+The following function, `logpost`, calculates the log of the posterior PMF of $\vec s$ (not normalized).
+```{r}
+#cps: change of slope points s_1, s_2.
+logpost = function(cps) 
+{
+    cps = sort(cps)
+    k = length(cps)
+    X = matrix(1, nrow = n, ncol = (k+2))
+    X[,2] = 1:n
+    for(j in 1:k)
+    {
+        X[,(j+2)] = pmax(c(1:n) - cps[j], 0)
+    }
+    mod = lm(y ~ X)
+    log.value = ((ncol(X) - n)/2)*(log(sum(mod$residuals^2))) - (0.5*(log(det(t(X) %*% X))))
+    return(log.value)
+}
+```
+
+```{r}
+logpost.matrix = matrix(0, nrow=n-3, ncol=n-3) # saves logpost(c(s1, s2)) so that we don't need
+# to compute again
+
+logpost.max = logpost(c(3,4))
+s.hat = c(0, 0) # MAP estimator for s
+# the nested for loops take 20 seconds
+for (s1 in 3:(n-3)) {
+  if (s1+1 > n-3) {
+    # then no need to go to the second for loop
+    # need this if statement, or (s1+1):(n-3) will cause bug when s1+1 > n-3
+    break
+  }
+  for (s2 in (s1+1):(n-3)) {
+    m = logpost(c(s1, s2))
+    logpost.matrix[s1, s2] = m
+    if (m > logpost.max) {
+      logpost.max = m
+      s.hat[1] = s1
+      s.hat[2] = s2
+    }
+  }
+}
+```
+
+```{r}
+post.s = matrix(0, nrow=n-3, ncol=n-3)
+for (s1 in 3:(n-3)) {
+  if (s1+1 > n-3) {
+    # then no need to go to the second for loop
+    # need this if statement, or (s1+1):(n-3) will cause bug when s1+1 > n-3
+    break
+  }
+  for (s2 in (s1+1):(n-3)) {
+    post.s[s1, s2] = exp(logpost.matrix[s1, s2] - logpost.max)
+  }
+}
+```
+
+```{r}
+post.s[s.hat[1], s.hat[2]]
+```
+
+
+
+## b
+On a scatter plot of the data, plot your best estimate of the fitted function along with appropriate uncertainty quantification. (5 points).
+
+## c
+Comment on whether the model is appropriate for this dataset. (2 points).
 
 
