@@ -284,12 +284,15 @@ logpost = function(cps)
     {
         X[,(j+2)] = pmax(c(1:n) - cps[j], 0)
     }
-    mod = lm(y ~ X)
+    mod = lm(y ~ -1 + X) # -1 is needed because the default provides an intercept term, but
+    # X already contains the intercept term
     log.value = ((ncol(X) - n)/2)*(log(sum(mod$residuals^2))) - (0.5*(log(det(t(X) %*% X))))
     return(log.value)
 }
 ```
 
+
+Below, `logpost.max` is the max of `logpost`, `s.hat` is where the max of `logpost` (hence the MAP estimator for $\vec s$).
 ```{r}
 logpost.matrix = matrix(0, nrow=n-3, ncol=n-3) # saves logpost(c(s1, s2)) so that we don't need
 # to compute again
@@ -315,6 +318,13 @@ for (s1 in 3:(n-3)) {
 }
 ```
 
+`s.hat`:
+```{r}
+s.hat
+```
+
+
+Below, `post.s` is the distribution of $\vec s$ (normalized), `post.s1` is the posterior distribution of $s_1$ (normalized), and `post.s1` is the posterior distribution of $s_2$ (normalized).
 ```{r}
 post.s = matrix(0, nrow=n-3, ncol=n-3)
 for (s1 in 3:(n-3)) {
@@ -327,7 +337,10 @@ for (s1 in 3:(n-3)) {
     post.s[s1, s2] = exp(logpost.matrix[s1, s2] - logpost.max)
   }
 }
+# normalize
+post.s = post.s / sum(post.s)
 ```
+
 ```{r}
 post.s1 = apply(post.s, MARGIN=1, sum)
 post.s2 = apply(post.s, MARGIN=2, sum)
@@ -357,10 +370,23 @@ while(conf.total <= .95) {
 c(s.hat[2]-d, s.hat[2]+d)
 ```
 
+```{r, include=FALSE}
+plot(1:n, y, type='l')
+abline(v=s.hat[1], col='red')
+abline(v=s.hat[2], col='red')
+```
 
 
 ## b
 On a scatter plot of the data, plot your best estimate of the fitted function along with appropriate uncertainty quantification. (5 points).
+
+We will create N=2000 iid samples of the posterior $(\vec\beta, \vec s)$. We achieve that by the posterior distribution of $\vec s$ and the distribution of $\vec\beta$ conditioned on the data $\vec y$ and $\vec s$. We already know the posterior distribution of $\vec s$ from part a. We can also derive the distribution of $\vec\beta \, |\, \vec y, c$ as follows: the model becomes linear in $\vec\beta$ when $c$ is fixed, and moreover, the prior distribution of $\vec\beta, \log\sigma$ conditioned on $c$ is still uniform because $c$ is assumed to be independent of $\vec\beta, \log\sigma$. Hence we can directly apply the results for linear models we learned in previous lectures and conclude that $\vec\beta \, |\, \vec y, c$ follows the multivariate t distribution
+$$t_{n-2}\big(\hat\beta, \; \hat\sigma^2(X'X)^{-1}\big).$$
+Note the parameters $\hat\beta$ and $\hat\sigma^2(X'X)^{-1}\big$ now depend on $c$. 
+
+Thus, if a random variable C follows the distribution of the posterior c and a random vector $\vec B$ follows the multivariate t distribution above (which depends on C), then the joint, $(\vec B, C)$, will follow the distribution of the desired posterior $(\vec\beta, c)$ by the product rule of probability distributions.
+
+The following code implements these ideas. `post.samples` is a matrix of the samples of $(c, \mu_0, \mu_1)$, where $\mu_0=\beta_0$ and $\mu_1=\beta_0+\beta_1$.
 
 ```{r}
 #Posterior samples for all the parameters:
@@ -390,11 +416,63 @@ for(i in 1:N)
 summary(post.samples[,5]) #true sigma is 10
 ```
 
+
+The following code generates `N` samples of $\vec s$ and $\vec\beta$ from the joint posterior distribution $\vec s, \vec\beta \;|\; \vec y$.
 ```{r}
 N = 2000 #number of posterior samples
-# in post.samples, column 1 is for 
-post.samples = matrix(-1, nrow=N, ncol=5)
-post.samples[,1] = sample(csp.vals, N, replace = T, prob = expos)
+# in post.samples, column 1, 2 is for samples from the distribution (s_1, s_2) | y
+# column 3, 4, 5, 6 is for samples from (beta_0, ..., beta_3) | s_1, s_2, y
+# equivalently, column 1 is for samples from s_1 | y
+# and column 2 is for samples from s_2 | s_1, y
+post.samples = matrix(-1, nrow=N, ncol=6)
+post.samples[,1] = sample(3:(n-3), N, replace = T, prob = post.s1[3:(n-3)])
+
+# s2.cond(s1) returns one sample from s_2 | s_1, y
+s2.cond = function(s1) {
+  s2.range = (s1+1):(n-3)
+  cond.prob = post.s[s1, s2.range] / post.s1[s1] # conditional probability distribution represented by vector
+  sample(s2.range, size=1, prob=cond.prob)
+}
+post.samples[,2] = sapply(post.samples[,1], FUN=s2.cond)
+
+# column 3, 4, 5, 6 is for samples from (beta_0, ..., beta_3) | s_1, s_2, y, which is multivariate t
+for(i in 1:N)
+{
+    p = 4
+    
+    s1 = post.samples[i,1]
+    s2 = post.samples[i,2]
+    X = matrix(1, nrow = n, ncol = p)
+    X[,2] = 1:n
+    X[,3] = pmax(c(1:n) - s1, 0)
+    X[,4] = pmax(c(1:n) - s2, 0)
+    lin.model = lm(y ~ -1 + X)
+    bhat = lin.model$coefficients
+    sighat = sqrt((sum((lin.model$residuals)^2))/(n-p))
+    Sigma.mat = (sighat^2)*solve(t(X) %*% X)
+    chiran = rchisq(1, df = n-p)
+    beta.samples = bhat + (rmvnorm(1, sigma = Sigma.mat))/(sqrt(chiran/(n-p)))
+    post.samples[i, 3:6] = beta.samples
+}
+
+```
+
+Our best estimates for posterior $\vec s$ and $\vec\beta$ are `s.hat` and the mean of the distribution $\vec\beta \;|\; \vec s, y$, which is
+$$\hat\beta = (X^\textsf{T}X)^{-1}X^\textsf{T}\vec y,$$
+where $X = X(\hat s)$ depends on `s.hat`.
+```{r}
+# get beta hat
+X = matrix(1, nrow = n, ncol = p)
+X[,2] = 1:n
+X[,3] = pmax(c(1:n) - s.hat[1], 0)
+X[,4] = pmax(c(1:n) - s.hat[2], 0)
+lin.model = lm(y ~ -1 + X)
+best.bhat = lin.model$coefficients
+best.bhat
+```
+```{r}
+plot(1:n, y, type='l')
+lines(lin.model$fitted.values, col='red')
 ```
 
 
