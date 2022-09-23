@@ -201,40 +201,74 @@ plot(1/x, as.numeric(lapply(1/x, FUN=log.post.f)), type='l')
 opt = optimize(log.post.f, interval=c(.080, .085), maximum = T)
 f.hat = opt$maximum
 log.post.f.max = opt$objective
+```
+
+```{r}
+x = seq(10, 14, by=.01)
+plot(1/x, as.numeric(lapply(1/x, FUN=function(f) {
+  log.post.f(f) - log.post.f.max
+})), type='l', ylab='log posterior pdf of f (up to constant)')
+```
+```{r}
+log.post.f(f.hat-.0005) - log.post.f.max
+log.post.f(f.hat+.0005) - log.post.f.max
+```
+
+
+
+```{r}
 post.f.0 = function(f) { # posterior f but not normalized
   exp(log.post.f(f) - log.post.f.max)
 }
 
-res = .00001 # resolution
-my.grid = seq(f.hat-.005, f.hat+.005, by=res)
+#post.f.vector = c(rep(0, length(my.grid))) # cache posterior pdf of f to avoid recomputing
+radius = .0005
+res = radius/500 # resolution
+my.grid = seq(f.hat-radius, f.hat+radius, by=res) # the posterior pdf of f is negligible outside this range
 total.integral = 0
+
 for (x in my.grid) {
-  total.integral = total.integral + res*post.f(x)
+  value = post.f.0(x)
+  total.integral = total.integral + res*value
+  
+  # cache
+  #post.f.vector
 }
+
+
 
 post.f = function(f) {
   post.f.0(f) / total.integral
 }
 ```
 
+
+
+Our point estimate is `f.hat`:
 ```{r}
 1/f.hat # very close to 12
 ```
+Plot of posterior pdf of f:
 ```{r}
-plot(1/x, as.numeric(lapply(1/x, FUN=post.f)), type='l')
+plot(my.grid, as.numeric(lapply(my.grid, FUN=post.f)), type='l', ylab='posterior pdf of f')
 ```
+95% confidence interval:
+```{r}
+d = res
+ci.integral = res*post.f(f.hat)
+while (ci.integral <= .95) {
+  ci.integral = ci.integral + res*post.f(f.hat-d) + res*post.f(f.hat+d)
+  d = d + res
+}
+c(f.hat-d, f.hat+d)
+```
+
+
 ```{r}
 post.f(1/12) # 1/12 is even better than f.hat, kind of weird
 post.f(f.hat)
 ```
 
-
-How to get 95% CI?
-```{r}
-ci.prob = function(d) {
-  
-}
-```
 
 ```{r}
 # gridding 
@@ -244,53 +278,125 @@ ci.prob = function(d) {
 
 ```
 
-Redefine `post.f` to its normalized version:
-```{r}
-post.f = function(x) {
-  post.f(x) / total.integral # error ... 
-}
-```
-
-
-```{r}
-d = res
-ci.integral = res*post.f(f.hat)
-while (ci.integral) {
-  ci.integral = ci.integral + res*post.f(f.hat-d) + res*post.f(f.hat+d)
-  d = d + res
-}
-```
 
 
 
 
 ```{r}
-integrate(log.post.f, lower=f.hat-.001, f.hat+.001)
+integrate(log.post.f, lower=f.hat-.001, f.hat+.001) # weird error
 ```
-
-```{r}
-integrate(function(x){x^2}, lower=0, upper=1)
-```
-
-
-
-
-
 
 ## b
 On a scatter plot of the data, plot your best estimate of the fitted function:
 $$t \mapsto \beta_0 + \beta_1 t + \beta_2 t^2 + \beta_3 \cos(2\pi ft) + \beta_4 \sin(2\pi ft)$$
 along with appropriate uncertainty quantification. (5 points).
 
-How should I get beta's?
+The following code generates `N` samples of $f$ and $\vec\beta$ from the joint posterior distribution $f, \vec\beta \;|\; \vec y$. The reasoning is similar to 3b.
 
-```{r}
-fitted.func = function(t) {
+```{r, include=F}
+N = 2000
+post.samples = matrix(-1, nrow=N, ncol=6)
+
+#center = radius/res + 1 # so that my.grid[center] = f.hat
+
+f.sample = c(rep(0, N))
+
+proportion = floor(N * res*post.f(f.hat)) # proportion of this f in the sample
+proportion = proportion + rbinom(1, size=1, prob=.5) # we should be using half floor, half ceiling
+f.sample[1:proportion] = rep(f.hat, proportion)
+
+i = 1
+start.index = proportion + 1
+# a do-while loop
+repeat{
+  f = f.hat - i*res
+  proportion = floor(N * res*post.f(f))
+  proportion = proportion + rbinom(1, size=1, prob=.5)
+  end.index = start.index + proportion - 1
+  if (end.index > N) break
+  if (proportion > 0) {
+    # rep(f, proportion) only accepts proportion > 0
+    f.sample[start.index:end.index] = rep(f, proportion)
+  }
   
+  start.index = end.index + 1
+  
+  f = f.hat + i*res
+  proportion = floor(N * res*post.f(f))
+  proportion = proportion + rbinom(1, size=1, prob=.5)
+  end.index = start.index + proportion - 1
+  if (end.index > N) break
+  if (proportion > 0) {
+    f.sample[start.index:end.index] = rep(f, proportion)
+  }
+  
+  start.index = end.index + 1
+  
+  i = i + 1
 }
 
-plot(t, y, type='l')
-lines(t, )
+#BUG!!!!!! RESOLUTION TOO SMALL
+# READ LECTURE6 CODE LINE 200 ISH
+```
+
+
+
+
+```{r}
+N = 2000 #number of posterior samples
+# in post.samples, column 1 is for samples from the distribution f | y
+# column 2 to 6 is for samples from (beta_0, ..., beta_4) | f, y
+# where f is fixed at the value given by column 1.
+post.samples = matrix(-1, nrow=N, ncol=6)
+
+
+
+post.samples[,1] = sample(3:(n-3), N, replace = T, prob = post.s1[3:(n-3)])
+
+# make column 2
+# s2.cond(s1) returns one sample from s_2 | s_1, y
+s2.cond = function(s1) {
+  s2.range = (s1+1):(n-3)
+  cond.prob = post.s[s1, s2.range] / post.s1[s1] # conditional probability distribution represented by vector
+  sample(s2.range, size=1, prob=cond.prob)
+}
+post.samples[,2] = sapply(post.samples[,1], FUN=s2.cond)
+
+# make columns 3, 4, 5, 6
+# column 3, 4, 5, 6 is for samples from (beta_0, ..., beta_3) | s_1, s_2, y, which is multivariate t
+for(i in 1:N)
+{
+    p = 4
+    
+    s1 = post.samples[i,1]
+    s2 = post.samples[i,2]
+    X = matrix(1, nrow = n, ncol = p)
+    X[,2] = 1:n
+    X[,3] = pmax(c(1:n) - s1, 0)
+    X[,4] = pmax(c(1:n) - s2, 0)
+    lin.model = lm(y ~ -1 + X)
+    bhat = lin.model$coefficients
+    sighat = sqrt((sum((lin.model$residuals)^2))/(n-p))
+    Sigma.mat = (sighat^2)*solve(t(X) %*% X)
+    chiran = rchisq(1, df = n-p)
+    beta.samples = bhat + (rmvnorm(1, sigma = Sigma.mat))/(sqrt(chiran/(n-p)))
+    post.samples[i, 3:6] = beta.samples
+}
+
+```
+
+Our best estimates for posterior $\vec s$ and $\vec\beta$ are `s.hat` and the mean of the distribution $\vec\beta \;|\; \vec s, y$, which is
+$$\hat\beta = (X^\textsf{T}X)^{-1}X^\textsf{T}\vec y,$$
+where $X = X(\hat s)$ depends on `s.hat`.
+```{r}
+# get beta hat
+X = matrix(1, nrow = n, ncol = p)
+X[,2] = 1:n
+X[,3] = pmax(c(1:n) - s.hat[1], 0)
+X[,4] = pmax(c(1:n) - s.hat[2], 0)
+lin.model = lm(y ~ -1 + X)
+best.bhat = lin.model$coefficients
+best.bhat
 ```
 
 
