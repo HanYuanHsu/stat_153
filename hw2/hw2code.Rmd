@@ -201,10 +201,22 @@ plot(1/x, as.numeric(lapply(1/x, FUN=log.post.f)), type='l')
 opt = optimize(log.post.f, interval=c(.080, .085), maximum = T)
 f.hat = opt$maximum
 log.post.f.max = opt$objective
-post.f = function(f) {
+post.f.0 = function(f) { # posterior f but not normalized
   exp(log.post.f(f) - log.post.f.max)
 }
+
+res = .00001 # resolution
+my.grid = seq(f.hat-.005, f.hat+.005, by=res)
+total.integral = 0
+for (x in my.grid) {
+  total.integral = total.integral + res*post.f(x)
+}
+
+post.f = function(f) {
+  post.f.0(f) / total.integral
+}
 ```
+
 ```{r}
 1/f.hat # very close to 12
 ```
@@ -223,6 +235,45 @@ ci.prob = function(d) {
   
 }
 ```
+
+```{r}
+# gridding 
+# consider fixed sequence of values
+# 1/12 +- 0.0001*2^n
+# see the pdfs each term of the sequence maps
+
+```
+
+Redefine `post.f` to its normalized version:
+```{r}
+post.f = function(x) {
+  post.f(x) / total.integral # error ... 
+}
+```
+
+
+```{r}
+d = res
+ci.integral = res*post.f(f.hat)
+while (ci.integral) {
+  ci.integral = ci.integral + res*post.f(f.hat-d) + res*post.f(f.hat+d)
+  d = d + res
+}
+```
+
+
+
+
+```{r}
+integrate(log.post.f, lower=f.hat-.001, f.hat+.001)
+```
+
+```{r}
+integrate(function(x){x^2}, lower=0, upper=1)
+```
+
+
+
 
 
 
@@ -380,53 +431,18 @@ abline(v=s.hat[2], col='red')
 ## b
 On a scatter plot of the data, plot your best estimate of the fitted function along with appropriate uncertainty quantification. (5 points).
 
-We will create N=2000 iid samples of the posterior $(\vec\beta, \vec s)$. We achieve that by the posterior distribution of $\vec s$ and the distribution of $\vec\beta$ conditioned on the data $\vec y$ and $\vec s$. We already know the posterior distribution of $\vec s$ from part a. We can also derive the distribution of $\vec\beta \, |\, \vec y, c$ as follows: the model becomes linear in $\vec\beta$ when $c$ is fixed, and moreover, the prior distribution of $\vec\beta, \log\sigma$ conditioned on $c$ is still uniform because $c$ is assumed to be independent of $\vec\beta, \log\sigma$. Hence we can directly apply the results for linear models we learned in previous lectures and conclude that $\vec\beta \, |\, \vec y, c$ follows the multivariate t distribution
-$$t_{n-2}\big(\hat\beta, \; \hat\sigma^2(X'X)^{-1}\big).$$
-Note the parameters $\hat\beta$ and $\hat\sigma^2(X'X)^{-1}\big$ now depend on $c$. 
-
-Thus, if a random variable C follows the distribution of the posterior c and a random vector $\vec B$ follows the multivariate t distribution above (which depends on C), then the joint, $(\vec B, C)$, will follow the distribution of the desired posterior $(\vec\beta, c)$ by the product rule of probability distributions.
-
-The following code implements these ideas. `post.samples` is a matrix of the samples of $(c, \mu_0, \mu_1)$, where $\mu_0=\beta_0$ and $\mu_1=\beta_0+\beta_1$.
-
-```{r}
-#Posterior samples for all the parameters:
-N = 2000 #number of posterior samples
-post.samples = matrix(-1, N, 5)
-post.samples[,1] = sample(csp.vals, N, replace = T, prob = expos)
-for(i in 1:N)
-{
-    cps = post.samples[i,1]
-    k = length(cps)
-    X = matrix(1, nrow = n, ncol = (k+2))
-    X[,2] = tme
-    for(j in 1:k)
-    {
-        X[,(j+2)] = pmax(tme - cps[j], 0)
-    }
-    lin.model = lm(yy ~ -1 + X)
-    bhat = lin.model$coefficients
-    sighat = sqrt((sum((lin.model$residuals)^2))/(n-3)) #this is also denoted by the Residual Standard Error
-    Sigma.mat = (sighat^2)*solve(t(X) %*% X)
-    chiran = (rchisq(1, df = n-3))
-    beta.samples = bhat + (rmvnorm(1, sigma = Sigma.mat))/(sqrt(chiran/(n-3)))
-    sig.sample = sqrt((sum((lin.model$residuals)^2))/chiran)
-    post.samples[i,c(2, 3, 4)] = beta.samples
-    post.samples[i, 5] = sig.sample
-}
-summary(post.samples[,5]) #true sigma is 10
-```
-
-
-The following code generates `N` samples of $\vec s$ and $\vec\beta$ from the joint posterior distribution $\vec s, \vec\beta \;|\; \vec y$.
+The following code generates `N` samples of $\vec s$ and $\vec\beta$ from the joint posterior distribution $\vec s, \vec\beta \;|\; \vec y$. The reasoning is similar to 3b.
 ```{r}
 N = 2000 #number of posterior samples
 # in post.samples, column 1, 2 is for samples from the distribution (s_1, s_2) | y
 # column 3, 4, 5, 6 is for samples from (beta_0, ..., beta_3) | s_1, s_2, y
+#
 # equivalently, column 1 is for samples from s_1 | y
 # and column 2 is for samples from s_2 | s_1, y
 post.samples = matrix(-1, nrow=N, ncol=6)
 post.samples[,1] = sample(3:(n-3), N, replace = T, prob = post.s1[3:(n-3)])
 
+# make column 2
 # s2.cond(s1) returns one sample from s_2 | s_1, y
 s2.cond = function(s1) {
   s2.range = (s1+1):(n-3)
@@ -435,6 +451,7 @@ s2.cond = function(s1) {
 }
 post.samples[,2] = sapply(post.samples[,1], FUN=s2.cond)
 
+# make columns 3, 4, 5, 6
 # column 3, 4, 5, 6 is for samples from (beta_0, ..., beta_3) | s_1, s_2, y, which is multivariate t
 for(i in 1:N)
 {
@@ -470,14 +487,43 @@ lin.model = lm(y ~ -1 + X)
 best.bhat = lin.model$coefficients
 best.bhat
 ```
+
+In the following plot, the black graph is the actual values of the time series, and the red graph is
+the fitted function.
 ```{r}
-plot(1:n, y, type='l')
+plot(1:n, y, type='l', xlab='t')
 lines(lin.model$fitted.values, col='red')
 ```
+We use the beta samples in `post.samples` to estimate 95% confidence intervals for posterior $\beta_0, \beta_1, \beta_2$, and $\beta_3$.
 
+95% CI for $\beta_0$:
+```{r}
+quantile(post.samples[,3], c(.025, .975))
+```
 
+95% CI for $\beta_1$:
+```{r}
+quantile(post.samples[,4], c(.025, .975))
+```
+
+95% CI for $\beta_2$:
+```{r}
+quantile(post.samples[,5], c(.025, .975))
+```
+
+95% CI for $\beta_3$:
+```{r}
+quantile(post.samples[,6], c(.025, .975))
+```
 
 ## c
 Comment on whether the model is appropriate for this dataset. (2 points).
+Visually, the model fits the data well. But in terms of forecasting, this model is bad; its future predictions will all be linear, while in reality, another change-of-slope point may occur. 
+
+```{r, include=F}
+plot(lin.model$residuals, type='l')
+acf(lin.model$residuals, lag.max=300)
+```
+
 
 
