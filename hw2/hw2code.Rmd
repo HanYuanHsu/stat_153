@@ -18,6 +18,7 @@ Consider the dataset lynx that is available in base R. This gives the annual num
 of lynx trappings for 1821-1934 in Canada. Type help(lynx) to learn more about the
 dataset.
 
+Here is the plot of lynx time series:
 ```{r}
 n = length(lynx)
 plot(1:n, lynx, type='l')
@@ -71,28 +72,93 @@ plot(f.val, expos, type = "l")
 
 From the plot, we see that the posterior distribution is quite peaked. We can use the mean of this distribution as a point estimate for f, which is `pm`. Since the posterior is quite peaked, it approximates a normal distribution, so we can get a rough confidence interval using the variance of the distribution:
 ```{r}
-#Posterior mean: 
-pm = (sum(f.val*expos))*grid.res
-pm
+f.hat = (sum(f.val*expos))*grid.res
+f.hat
 #Posterior standard deviation:
-psd = sqrt((sum(((f.val - pm)^2)*expos))*grid.res)
-psd
+psd = sqrt((sum(((f.val - f.hat)^2)*expos))*grid.res)
 # rough 95% CI for f
-c(pm - 1.96*psd, pm + 1.96*psd)
+c(f.hat - 1.96*psd, f.hat + 1.96*psd)
 ```
 
 The period is the reciprocal of frequency, so we easily get the period's point estimate and CI as follows:
 ```{r}
-1 / pm
-c(1 / (pm + 2*psd), 1 / (pm - 2*psd))
+1 / f.hat
+c(1 / (f.hat + 2*psd), 1 / (f.hat - 2*psd))
 ```
 
 ## c
 Provide point estimates and 95% marginal uncertainty intervals for $\beta_0$, $\beta_1$, $\beta_2$, and $\sigma$.
 
+In the following code, `post.samples[ ,1:5]` stores samples of $f, \vec\beta$ from the joint posterior distribution $f, \vec\beta\;|\; \vec y$, and `post.samples[ ,c(1,6)]` stores samples of $f, \sigma$ from the joint posterior distribution $f, \sigma\;|\; \vec y$.
 
+```{r}
+library(mvtnorm)
+N = 2000 #number of posterior samples
+
+# in post.samples, column 1 is for f sampled from f | y
+# columns 2:5 is for samples from beta0, beta1, beta2 | f, y
+# column 6 is for samples from sigma | f, y
+post.samples = matrix(-1, N, 5)
+post.samples[,1] = sample(f.val, N, replace = T, prob = expos) # iid samples of posterior f
+
+# make columns 2:5
+p = 3
+X = matrix(1, nrow = n, ncol = p)
+for(i in 1:N)
+{
+    f = post.samples[i, 1]
+    X[,2] = cos(2*pi*f*(1:n))
+    X[,3] = sin(2*pi*f*(1:n))
+    lin.model = lm(lynx ~ -1 + X)
+    bhat = lin.model$coefficients
+    RSS = sum(lin.model$residuals^2)
+    sighat = sqrt( RSS/(n-p) )
+    Sigma.mat = (sighat^2)*solve(t(X) %*% X)
+    chiran = (rchisq(1, df = n-p))
+    beta.samples = bhat + (rmvnorm(1, sigma = Sigma.mat))/(sqrt(chiran/(n-p)))
+    sig.sample = sqrt( RSS/chiran )
+    
+    post.samples[i,2:4] = beta.samples
+    post.samples[i,5] = sig.sample
+}
+```
+
+Below is a point estimate for $\beta_0$ (we use mean) and a 95% confidence interval:
+```{r}
+b0 = mean(post.samples[,2])
+b0
+quantile(post.samples[,2], c(.025, .975))
+```
+Below is a point estimate for $\beta_1$ and a 95% confidence interval:
+```{r}
+b1 = mean(post.samples[,3])
+b1
+quantile(post.samples[,3], c(.025, .975))
+```
+Below is a point estimate for $\beta_2$ and a 95% confidence interval:
+```{r}
+b2 = mean(post.samples[,4])
+b2
+quantile(post.samples[,4], c(.025, .975))
+```
+Below is a point estimate for $\sigma$ and a 95% confidence interval:
+```{r}
+b3 = mean(post.samples[,5])
+b3
+quantile(post.samples[,5], c(.025, .975))
+```
 ## d
 Comment on whether this is a good model for this dataset. (2 points)
+
+Plot the model output (in red) using the point estimates derived above and compare the model output with the actual time series:
+```{r}
+tme = 1:n
+model.output = rep(b0, n) + b1*cos(2*pi*f.hat*tme) + b2*sin(2*pi*f.hat*tme)
+plot(tme, lynx, type='l')
+lines(model.output, col='red')
+```
+The fit is reasonable. f.hat does capture the small-term cycles of the time series, and the bottom of the model output aligns with the bottom of the actual data. The biggest drawback, though, is that in the actual data, the peaks are noticeably bigger for every 4 cycles, and our model cannot reflect this pattern in the data because by design, the amplitude of the model is constant. 
+
 
 # 3
 Download the Google Trends Data (for the United States) for the query mask. This
