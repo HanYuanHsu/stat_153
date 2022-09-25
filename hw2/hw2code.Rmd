@@ -13,6 +13,87 @@ set.seed(111)
 ```
 Reference: lecture code.
 
+# 2
+Consider the dataset lynx that is available in base R. This gives the annual numbers
+of lynx trappings for 1821-1934 in Canada. Type help(lynx) to learn more about the
+dataset.
+
+```{r}
+n = length(lynx)
+plot(1:n, lynx, type='l')
+```
+
+
+## a
+Plot the periodogram of the data and comment on its notable features. (3
+points).
+```{r}
+n_half = floor(n/2)
+pgram = abs(fft(lynx)[1:n_half])^2 / n
+plot(pgram, type='h', xlab='j in j/n')
+```
+The largest peak is at j=1, which corresponds to the $e^{2\pi i t \cdot 1/n}$ component. The period of this component is the total length of the time series, so it is not very interesting. Let's focus on the periodogram values when $j \geq 2$:
+```{r}
+plot(c(0, pgram[2:n_half]), type='h')
+```
+The peak at 13 suggests that there is a seasonal pattern with period roughly
+```{r}
+n / 13
+```
+but the frequency need not be exactly 13/n, as we can see some leakages around the spike at j=13.
+
+## b
+To this dataset, fit the model:
+$$Y_t = \beta_0 + \beta_1 \cos(2\pi ft) + \beta_2 \sin(2\pi ft) + Z_t$$
+with $Z_t$ iid $\sim N(0, \sigma^2)$. Provide a point estimate and 95% uncertainty interval for the frequency f and the corresponding period of oscillation. (4 points).
+
+Below, `expos` is the posterior distribution of the frequency f (f is discretized here):
+```{r}
+grid.res = 0.0001
+f.val = seq(1/n, 0.5, grid.res)
+X = matrix(1, nrow = n, ncol = 3)
+#expos = rep(-1, length(f.val)) #exact marginal posterior for omega
+log.values = rep(-1, length(f.val))
+#log.det.term = rep(-1, length(f.val))
+for(i in 1:length(f.val))
+{
+    X[,2] = cos(2*pi*f.val[i]*(1:n))
+    X[,3] = sin(2*pi*f.val[i]*(1:n))
+    mod = lm(lynx ~ -1 + X)
+    log.values[i] = ((ncol(X) - n)/2)*(log(sum(mod$residuals^2))) - (0.5*(log(det(t(X) %*% X))))
+}
+
+log.values = log.values - max(log.values) #scaling to remove large values 
+expos = exp(log.values) # exponentiated posterior 
+expos = expos/sum(expos) / grid.res
+plot(f.val, expos, type = "l")
+```
+
+From the plot, we see that the posterior distribution is quite peaked. We can use the mean of this distribution as a point estimate for f, which is `pm`. Since the posterior is quite peaked, it approximates a normal distribution, so we can get a rough confidence interval using the variance of the distribution:
+```{r}
+#Posterior mean: 
+pm = (sum(f.val*expos))*grid.res
+pm
+#Posterior standard deviation:
+psd = sqrt((sum(((f.val - pm)^2)*expos))*grid.res)
+psd
+# rough 95% CI for f
+c(pm - 1.96*psd, pm + 1.96*psd)
+```
+
+The period is the reciprocal of frequency, so we easily get the period's point estimate and CI as follows:
+```{r}
+1 / pm
+c(1 / (pm + 2*psd), 1 / (pm - 2*psd))
+```
+
+## c
+Provide point estimates and 95% marginal uncertainty intervals for $\beta_0$, $\beta_1$, $\beta_2$, and $\sigma$.
+
+
+## d
+Comment on whether this is a good model for this dataset. (2 points)
+
 # 3
 Download the Google Trends Data (for the United States) for the query mask. This
 should be a monthly time series dataset that indicates the search popularity of this
@@ -293,6 +374,8 @@ along with appropriate uncertainty quantification. (5 points).
 
 The following code generates `N` samples of $f$ and $\vec\beta$ from the joint posterior distribution $f, \vec\beta \;|\; \vec y$. The reasoning is similar to 3b.
 
+
+Make Samples from f | y
 ```{r, include=F}
 N = 2000
 post.samples = matrix(-1, nrow=N, ncol=6)
@@ -302,6 +385,7 @@ post.samples = matrix(-1, nrow=N, ncol=6)
 f.sample = c(rep(0, N))
 
 proportion = floor(N * res*post.f(f.hat)) # proportion of this f in the sample
+
 proportion = proportion + rbinom(1, size=1, prob=.5) # we should be using half floor, half ceiling
 f.sample[1:proportion] = rep(f.hat, proportion)
 
@@ -311,7 +395,7 @@ start.index = proportion + 1
 repeat{
   f = f.hat - i*res
   proportion = floor(N * res*post.f(f))
-  proportion = proportion + rbinom(1, size=1, prob=.5)
+  proportion = proportion + rbinom(1, size=1, prob=.5) # change prob to decimal parts of post.f(f)
   end.index = start.index + proportion - 1
   if (end.index > N) break
   if (proportion > 0) {
