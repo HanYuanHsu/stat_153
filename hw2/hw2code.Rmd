@@ -781,5 +781,72 @@ plot(lin.model$residuals, type='l')
 acf(lin.model$residuals, lag.max=300)
 ```
 
+# 6
+Download the google trends time series dataset for the query playoffs (download the
+trends for the United States and not worldwide). This should be a monthly time
+series dataset that indicates the search popularity of this query from January 2004 to
+September 2022.
+
+```{r}
+dat = read.csv('playoffs.csv', skip=1, header=T)
+y = dat[,2]
+n = length(y)
+```
+
+
+## a
+Plot the data and observe that the scale of variability increases with time. To fix
+this, take the logarithm of the data. Plot the logarithm and comment on whether
+the variability can now be assumed to be constant over time. (2 points)
+
+```{r}
+plot(1:n, y, type='l')
+log.y = log(y)
+plot(1:n, log.y, type='l')
+```
+The variability is still increasing a little bit, but it is small. After all, taking logarithm cannot completely wipe off something that is increasing, but it can significantly slow down the increasing rate.
+
+
+## b
+The logarithmed data have an increasing trend and a periodic component superimposed
+on the trend. To get an idea of the frequencies present in the periodic
+component, fit a linear trend model to the logarithmed data, compute the residuals
+and then plot the periodogram of the residuals. Comment on the location
+and size of the main spikes in the periodogram. (3 points)
+```{r}
+tme = 1:n
+lin = lm(log.y ~ 1 + tme)
+# the residuals are simply given by lin$residuals
+plot(tme, lin$residuals, type='l', ylab='residual')
+```
+Periodogram for residuals:
+```{r}
+n_half = floor(n/2)
+pgram = abs(fft(log.y)[1:n_half])^2 / n
+# if you plot pgram, the first entry (j=1) is so huge that other spikes are hardly noticeable;
+# hence, we set the first entry to be 0 in pgram1 and plot pgram1 instead
+#plot(pgram, type='h', xlab='j in j/n')
+pgram1 = pgram; pgram1[1] = 0
+plot(pgram1, type='h', xlab='j in j/n', main='Periodogram of the Residuals')
+```
+The main spikes occur at j=20, 38, 57, 76, 95, which are multiples of 19 (except 20, but almost). This suggests the main period of the data is n/19:
+```{r}
+n/19
+```
+The magnitude of the spike (excluding those near j=1) is largest when j=38.
+
+
+## c
+To the logarithmed data, fit the model
+$$y_i = g(t_i) + Z_i$$
+where $Z_i$ are iid $\sim N(0, \sigma^2)$ and 
+$$g(t) = \beta_0 + \beta_1t
++ \beta_2 \cos(2πf_1t) + \beta_3 \sin(2πf_1t)
++ \beta_4 \cos(2πf_2t) + \beta_5 \sin(2πf_2t)
++ \beta_6 \cos(2πf_3t) + \beta_7 \sin(2πf_3t).$$
+
+Treat the betas, f's, and sigma as unknown parameters and estimate them from
+data. Plot your estimate of g (and appropriate uncertainty indicators) along with
+the actual data. (6 points)
 
 
