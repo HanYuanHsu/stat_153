@@ -89,7 +89,7 @@ c(1 / (f.hat + 2*psd), 1 / (f.hat - 2*psd))
 ## c
 Provide point estimates and 95% marginal uncertainty intervals for $\beta_0$, $\beta_1$, $\beta_2$, and $\sigma$.
 
-In the following code, `post.samples[ ,1:5]` stores samples of $f, \vec\beta$ from the joint posterior distribution $f, \vec\beta\;|\; \vec y$, and `post.samples[ ,c(1,6)]` stores samples of $f, \sigma$ from the joint posterior distribution $f, \sigma\;|\; \vec y$.
+In the following code, `post.samples[ ,1:5]` stores samples of $f, \vec\beta$ from the joint posterior distribution $f, \vec\beta\;|\; \vec y$, and `post.samples[ ,c(1,6)]` stores samples of $f, \sigma$ from the joint posterior distribution $f, \sigma\;|\; \vec y$. More explanation of the code is in 3b.
 
 ```{r}
 library(mvtnorm)
@@ -397,7 +397,8 @@ Our point estimate is `f.hat`:
 ```
 Plot of posterior pdf of f:
 ```{r}
-plot(my.grid, as.numeric(lapply(my.grid, FUN=post.f)), type='l', ylab='posterior pdf of f')
+post.f.grid = sapply(my.grid, FUN=post.f)
+plot(my.grid, post.f.grid, type='l', ylab='posterior pdf of f')
 ```
 95% confidence interval:
 ```{r}
@@ -440,9 +441,79 @@ along with appropriate uncertainty quantification. (5 points).
 
 The following code generates `N` samples of $f$ and $\vec\beta$ from the joint posterior distribution $f, \vec\beta \;|\; \vec y$. The reasoning is similar to 3b.
 
+```{r}
+library(mvtnorm)
+N = 2000 #number of posterior samples
 
-Make Samples from f | y
+# in post.samples, column 1 is for f sampled from f | y
+# columns 2:6 is for samples from beta0, ..., beta4 | f, y
+post.samples = matrix(-1, N, 6)
+post.samples[,1] = sample(my.grid, N, replace = T, prob = post.f.grid)
+
+# make columns 2:6
+p = 5
+X = matrix(1, nrow = n, ncol = p)
+for(i in 1:N)
+{
+    f = post.samples[i, 1]
+    
+    X[,2] = 1:n
+    X[,3] = (1:n)^2
+    X[,4] = cos(2*pi*f*(1:n))
+    X[,5] = sin(2*pi*f*(1:n))
+    lin.model = lm(y ~ -1 + X)
+    bhat = lin.model$coefficients
+    RSS = sum(lin.model$residuals^2)
+    sighat = sqrt( RSS/(n-p) )
+    Sigma.mat = (sighat^2)*solve(t(X) %*% X)
+    chiran = (rchisq(1, df = n-p))
+    beta.samples = bhat + (rmvnorm(1, sigma = Sigma.mat))/(sqrt(chiran/(n-p)))
+    
+    post.samples[i, 2:(1+p)] = beta.samples
+}
+```
+
+Below is a point estimate for $\beta_0$ (we use mean) and a 95% confidence interval:
+```{r}
+b0 = mean(post.samples[,2])
+b0
+quantile(post.samples[,2], c(.025, .975))
+```
+Below is a point estimate for $\beta_1$ and a 95% confidence interval:
+```{r}
+b1 = mean(post.samples[,3])
+b1
+quantile(post.samples[,3], c(.025, .975))
+```
+Below is a point estimate for $\beta_2$ and a 95% confidence interval:
+```{r}
+b2 = mean(post.samples[,4])
+b2
+quantile(post.samples[,4], c(.025, .975))
+```
+Below is a point estimate for $\beta_3$ and a 95% confidence interval:
+```{r}
+b3 = mean(post.samples[,5])
+b3
+quantile(post.samples[,5], c(.025, .975))
+```
+Below is a point estimate for $\beta_4$ and a 95% confidence interval:
+```{r}
+b4 = mean(post.samples[,6])
+b4
+quantile(post.samples[,6], c(.025, .975))
+```
+Plot of my best estimate of the fitted function (in red):
+```{r}
+model.output = b0*rep(1,n) + b1*(1:n) + b2*(1:n)^2 + b3*cos(2*pi*f.hat*(1:n)) + b4*sin(2*pi*f.hat*(1:n))
+plot(1:n, y, type='l')
+lines(model.output, col='red')
+```
+
+
 ```{r, include=F}
+# my original, manual attempt of doing sample(my.grid, N, replace = T, prob = post.f.grid)
+
 N = 2000
 post.samples = matrix(-1, nrow=N, ncol=6)
 
@@ -488,68 +559,6 @@ repeat{
 #BUG!!!!!! RESOLUTION TOO SMALL
 # READ LECTURE6 CODE LINE 200 ISH
 ```
-
-
-
-
-```{r}
-N = 2000 #number of posterior samples
-# in post.samples, column 1 is for samples from the distribution f | y
-# column 2 to 6 is for samples from (beta_0, ..., beta_4) | f, y
-# where f is fixed at the value given by column 1.
-post.samples = matrix(-1, nrow=N, ncol=6)
-
-
-
-post.samples[,1] = sample(3:(n-3), N, replace = T, prob = post.s1[3:(n-3)])
-
-# make column 2
-# s2.cond(s1) returns one sample from s_2 | s_1, y
-s2.cond = function(s1) {
-  s2.range = (s1+1):(n-3)
-  cond.prob = post.s[s1, s2.range] / post.s1[s1] # conditional probability distribution represented by vector
-  sample(s2.range, size=1, prob=cond.prob)
-}
-post.samples[,2] = sapply(post.samples[,1], FUN=s2.cond)
-
-# make columns 3, 4, 5, 6
-# column 3, 4, 5, 6 is for samples from (beta_0, ..., beta_3) | s_1, s_2, y, which is multivariate t
-for(i in 1:N)
-{
-    p = 4
-    
-    s1 = post.samples[i,1]
-    s2 = post.samples[i,2]
-    X = matrix(1, nrow = n, ncol = p)
-    X[,2] = 1:n
-    X[,3] = pmax(c(1:n) - s1, 0)
-    X[,4] = pmax(c(1:n) - s2, 0)
-    lin.model = lm(y ~ -1 + X)
-    bhat = lin.model$coefficients
-    sighat = sqrt((sum((lin.model$residuals)^2))/(n-p))
-    Sigma.mat = (sighat^2)*solve(t(X) %*% X)
-    chiran = rchisq(1, df = n-p)
-    beta.samples = bhat + (rmvnorm(1, sigma = Sigma.mat))/(sqrt(chiran/(n-p)))
-    post.samples[i, 3:6] = beta.samples
-}
-
-```
-
-Our best estimates for posterior $\vec s$ and $\vec\beta$ are `s.hat` and the mean of the distribution $\vec\beta \;|\; \vec s, y$, which is
-$$\hat\beta = (X^\textsf{T}X)^{-1}X^\textsf{T}\vec y,$$
-where $X = X(\hat s)$ depends on `s.hat`.
-```{r}
-# get beta hat
-X = matrix(1, nrow = n, ncol = p)
-X[,2] = 1:n
-X[,3] = pmax(c(1:n) - s.hat[1], 0)
-X[,4] = pmax(c(1:n) - s.hat[2], 0)
-lin.model = lm(y ~ -1 + X)
-best.bhat = lin.model$coefficients
-best.bhat
-```
-
-
 
 c) Comment on whether model (3) is appropriate for this dataset. (2 points).
 
