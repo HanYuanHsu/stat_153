@@ -560,7 +560,10 @@ repeat{
 # READ LECTURE6 CODE LINE 200 ISH
 ```
 
-c) Comment on whether model (3) is appropriate for this dataset. (2 points).
+## c
+Comment on whether model (3) is appropriate for this dataset. (2 points).
+
+The fit looks good from the plot, but again I don't think the model is appropriate for forecasting because of the quadratic part. Since the time series should stay bounded for all times, the curvy, convex long-term trend of the data should just be part of a sine wave with a larger period instead of a quadratic curve.
 
 # 5
 Download the FRED dataset on Total Construction Spending in the United States
@@ -857,5 +860,71 @@ $$g(t) = \beta_0 + \beta_1t
 Treat the betas, f's, and sigma as unknown parameters and estimate them from
 data. Plot your estimate of g (and appropriate uncertainty indicators) along with
 the actual data. (6 points)
+
+Reference: lecture 7 code.
+```{r}
+tme = 1:n
+p = 8
+X = matrix(1, nrow = n, ncol = p)
+logpost = function(f_1, f_2, f_3) # fs: a vector of f_1, f_2, f_3
+{
+    X[,2] = tme
+    X[,3] = cos(2*pi*f_1*tme)
+    X[,4] = sin(2*pi*f_1*tme)
+    X[,5] = cos(2*pi*f_2*tme)
+    X[,6] = sin(2*pi*f_2*tme)
+    X[,7] = cos(2*pi*f_3*tme)
+    X[,8] = sin(2*pi*f_3*tme)
+    mod = lm(log.y ~ -1 + X)
+    log.value = ((p - n)/2)*(log(sum(mod$residuals^2))) - (0.5*(log(det(t(X) %*% X))))
+    return(log.value)
+}
+```
+
+We need to discretize the frequencies $f_1, f_2, f_3$ to do Bayesian inference. From the periodogram, we see that a good range of the frequencies to consider is from 10/n to 60/n
+```{r}
+f1.grid = seq(10/n, 60/n, by=.5/n)
+f2.grid = seq(10/n, 60/n, by=.5/n)
+f3.grid = seq(10/n, 60/n, by=.5/n)
+g = expand.grid(x=f1.grid, y=f2.grid, z = f3.grid)
+
+for(i in 1:nrow(g)) g$lp[i] = logpost(g$x[i], g$y[i], g$z[i])
+#Convert LogPosterior to Posterior
+g$p = exp(g$lp - max(g$lp))
+g$p = g$p/(sum(g$p))
+```
+
+Estimate the frequencies by posterior maximizer:
+```{r}
+ind.max = which.max(g$lp)
+f.hat = g[ind.max, ]
+f.hat
+```
+```{r, include=F}
+save(g, file='g.Rdata')
+```
+
+
+```{r}
+cp1.gr = seq(75, 125, by = 1)
+cp2.gr = seq(175, 225, by = 1)
+cp3.gr = seq(275, 325, by = 1)
+g = expand.grid(x=cp1.gr, y=cp2.gr, z = cp3.gr)
+head(g)
+tail(g)
+for(i in 1:nrow(g)) g$lp[i] = logpost(c(g$x[i], g$y[i], g$z[i]))
+head(g)
+tail(g)
+#Convert LogPosterior to Posterior
+g$p = exp(g$lp - max(g$lp))
+g$p = g$p/(sum(g$p))
+head(g)
+tail(g)
+#Posterior mode:
+ind.max = which.max(g$p)
+est.cp = g[ind.max,] #posterior maximizer
+est.cp
+```
+
 
 
