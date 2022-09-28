@@ -13,6 +13,9 @@ set.seed(111)
 ```
 Reference: lecture code.
 
+# 1
+Data set 1 has periodogram B, and Data set 2 has periodogram A. The reason is that data set 2 looks oscillating, which suggests that the time series is a superposition of highly oscillating sine/cosine waves, namely sine/cosine waves with high frequencies. A periodogram tells us the amplitude of a wave with a given frequency, and in periodogram A, large amplitudes are on the high frequency side. 
+
 # 2
 Consider the dataset lynx that is available in base R. This gives the annual numbers
 of lynx trappings for 1821-1934 in Canada. Type help(lynx) to learn more about the
@@ -26,8 +29,8 @@ plot(1:n, lynx, type='l')
 
 
 ## a
-Plot the periodogram of the data and comment on its notable features. (3
-points).
+Plot the periodogram of the data and comment on its notable features. (3 points).
+
 ```{r}
 n_half = floor(n/2)
 pgram = abs(fft(lynx)[1:n_half])^2 / n
@@ -947,7 +950,30 @@ sd(post.f.sample[2,])
 sd(post.f.sample[3,])
 ```
 
+Use `f.hat.cg`, the estimated frequency vector, to plot the model function $g$. The model output is in red, while the actual output is in gray.
+```{r}
+f_1 = f.hat.cg[1]
+f_2 = f.hat.cg[2]
+f_3 = f.hat.cg[3]
+#p = 8
+X = matrix(1, nrow = n, ncol = p)
+X[,2] = tme
+X[,3] = cos(2*pi*f_1*tme)
+X[,4] = sin(2*pi*f_1*tme)
+X[,5] = cos(2*pi*f_2*tme)
+X[,6] = sin(2*pi*f_2*tme)
+X[,7] = cos(2*pi*f_3*tme)
+X[,8] = sin(2*pi*f_3*tme)
+lin.model = lm(log.y ~ -1 + X)
 
+# estimated betas:
+lin.model$coefficients
+
+plot(tme, log.y, type='l', col='gray')
+lines(lin.model$fitted.values, col='red')
+```
+
+Uncertainty quantification for the unknown parameters:
 ```{r}
 library(mvtnorm)
 # columns 1:8 is for samples from beta0, ..., beta7 | f, y
@@ -968,7 +994,7 @@ for(i in 1:N)
     X[,6] = sin(2*pi*f_2*tme)
     X[,7] = cos(2*pi*f_3*tme)
     X[,8] = sin(2*pi*f_3*tme)
-    lin.model = lm(lynx ~ -1 + X)
+    lin.model = lm(log.y ~ -1 + X)
     bhat = lin.model$coefficients
     RSS = sum(lin.model$residuals^2)
     sighat = sqrt( RSS/(n-p) )
@@ -977,10 +1003,22 @@ for(i in 1:N)
     beta.samples = bhat + (rmvnorm(1, sigma = Sigma.mat))/(sqrt(chiran/(n-p)))
     sig.sample = sqrt( RSS/chiran )
     
-    post.samples[i,2:4] = beta.samples
-    post.samples[i,5] = sig.sample
+    post.samples[i,1:8] = beta.samples
+    post.samples[i,9] = sig.sample
 }
 ```
+
+Below are the 95% CIs for the betas:
+```{r}
+for (j in 1:8) {
+  print(quantile(post.samples[,j], c(.025, .975)))
+}
+```
+Below is the 95% CI for sigma:
+```{r}
+quantile(post.samples[,9], c(.025, .975))
+```
+
 
 
 
