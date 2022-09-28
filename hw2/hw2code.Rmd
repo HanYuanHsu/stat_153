@@ -845,6 +845,7 @@ The main spikes occur at j=20, 38, 57, 76, 95, which are multiples of 19 (except
 ```{r}
 n/19
 ```
+
 The magnitude of the spike (excluding those near j=1) is largest when j=38.
 
 
@@ -866,8 +867,11 @@ Reference: lecture 7 code.
 tme = 1:n
 p = 8
 X = matrix(1, nrow = n, ncol = p)
-logpost = function(f_1, f_2, f_3) # fs: a vector of f_1, f_2, f_3
+logpost = function(fs) # fs: a vector of f_1, f_2, f_3
 {
+    f_1 = fs[1]
+    f_2 = fs[2]
+    f_3 = fs[3]
     X[,2] = tme
     X[,3] = cos(2*pi*f_1*tme)
     X[,4] = sin(2*pi*f_1*tme)
@@ -881,50 +885,104 @@ logpost = function(f_1, f_2, f_3) # fs: a vector of f_1, f_2, f_3
 }
 ```
 
-We need to discretize the frequencies $f_1, f_2, f_3$ to do Bayesian inference. From the periodogram, we see that a good range of the frequencies to consider is from 10/n to 60/n
-```{r}
-f1.grid = seq(10/n, 60/n, by=.5/n)
-f2.grid = seq(10/n, 60/n, by=.5/n)
-f3.grid = seq(10/n, 60/n, by=.5/n)
-g = expand.grid(x=f1.grid, y=f2.grid, z = f3.grid)
+We need to discretize the frequencies $f_1, f_2, f_3$ to do Bayesian inference. From the periodogram, we see that a good range of the frequencies to consider is from 10/n to 60/n. Because my computer is not fast, the grid used here is quite crude. 
 
-for(i in 1:nrow(g)) g$lp[i] = logpost(g$x[i], g$y[i], g$z[i])
-#Convert LogPosterior to Posterior
-g$p = exp(g$lp - max(g$lp))
-g$p = g$p/(sum(g$p))
+```{r}
+f.cg = combn(seq(10/n, 60/n, by=2/n), m=3) # cg means crude grid
+lp.cg = apply(f.cg, MARGIN=2, FUN=logpost) # log posterior for crude grid
 ```
 
 Estimate the frequencies by posterior maximizer:
 ```{r}
-ind.max = which.max(g$lp)
-f.hat = g[ind.max, ]
-f.hat
+ind.max.cg = which.max(lp.cg)
+f.hat.cg = f.cg[ ,ind.max.cg]
+f.hat.cg
 ```
 ```{r, include=F}
-save(g, file='g.Rdata')
+# my attempt of getting a finer grid centered around f.hat.cg
+# but the result is not much finer than the crude grid subject to the same computation time
+post.cg = exp(lp.cg - max(lp.cg))
+post.cg = post.cg / sum(post.cg)
+significant.f.cg = f.cg[, post.cg > 1e-9]
+c(min(significant.f.cg[1, ]), max(significant.f.cg[1, ]))
+c(min(significant.f.cg[2, ]), max(significant.f.cg[2, ]))
+c(min(significant.f.cg[3, ]), max(significant.f.cg[3, ]))
+```
+```{r, include=F}
+f.gr = f.hat.cg + combn(seq(-0.08888, 0.08888, length.out=50), m=3) # PROBLEM: f1 in this grid can be negative!!!!!
+lp.gr = apply(f.gr, MARGIN=2, FUN=logpost) # takes 10 seconds
+```
+
+```{r, include=F}
+ind.max.gr = which.max(lp.gr)
+f.hat.gr = f.gr[ ,ind.max.gr]
+f.hat.gr # f.hat.gr[1] < 0, which is unacceptable
+```
+```{r, include=F}
+N = 2000
+post.f = exp(lp.gr - max(lp.gr))
+post.f = post.f / sum(post.f)
+post.f.ind.sample = sample(1:ncol(f.gr), N, replace=T, prob=post.f)
+post.f.sample = f.gr[ ,post.f.ind.sample]
+```
+
+Make samples of posterior f1, f2, f3, stored in `post.f.sample`:
+```{r}
+N = 2000
+post.f = exp(lp.cg - max(lp.cg))
+post.f = post.f / sum(post.f)
+post.f.ind.sample = sample(1:ncol(f.cg), N, replace=T, prob=post.f)
+post.f.sample = f.cg[ ,post.f.ind.sample]
+```
+
+95% CI for $f_1$, $f_2$, and $f_3$:
+```{r}
+quantile(post.f.sample[1,], c(.025, .975))
+quantile(post.f.sample[2,], c(.025, .975))
+quantile(post.f.sample[3,], c(.025, .975))
+```
+```{r}
+sd(post.f.sample[1,])
+sd(post.f.sample[2,])
+sd(post.f.sample[3,])
 ```
 
 
 ```{r}
-cp1.gr = seq(75, 125, by = 1)
-cp2.gr = seq(175, 225, by = 1)
-cp3.gr = seq(275, 325, by = 1)
-g = expand.grid(x=cp1.gr, y=cp2.gr, z = cp3.gr)
-head(g)
-tail(g)
-for(i in 1:nrow(g)) g$lp[i] = logpost(c(g$x[i], g$y[i], g$z[i]))
-head(g)
-tail(g)
-#Convert LogPosterior to Posterior
-g$p = exp(g$lp - max(g$lp))
-g$p = g$p/(sum(g$p))
-head(g)
-tail(g)
-#Posterior mode:
-ind.max = which.max(g$p)
-est.cp = g[ind.max,] #posterior maximizer
-est.cp
+library(mvtnorm)
+# columns 1:8 is for samples from beta0, ..., beta7 | f, y
+# column 9 is for samples from sigma | f, y
+post.samples = matrix(-1, N, 9)
+
+#p = 8
+X = matrix(1, nrow = n, ncol = p)
+for(i in 1:N)
+{
+    f_1 = post.f.sample[1,i]
+    f_2 = post.f.sample[2,i]
+    f_3 = post.f.sample[3,i]
+    X[,2] = tme
+    X[,3] = cos(2*pi*f_1*tme)
+    X[,4] = sin(2*pi*f_1*tme)
+    X[,5] = cos(2*pi*f_2*tme)
+    X[,6] = sin(2*pi*f_2*tme)
+    X[,7] = cos(2*pi*f_3*tme)
+    X[,8] = sin(2*pi*f_3*tme)
+    lin.model = lm(lynx ~ -1 + X)
+    bhat = lin.model$coefficients
+    RSS = sum(lin.model$residuals^2)
+    sighat = sqrt( RSS/(n-p) )
+    Sigma.mat = (sighat^2)*solve(t(X) %*% X)
+    chiran = (rchisq(1, df = n-p))
+    beta.samples = bhat + (rmvnorm(1, sigma = Sigma.mat))/(sqrt(chiran/(n-p)))
+    sig.sample = sqrt( RSS/chiran )
+    
+    post.samples[i,2:4] = beta.samples
+    post.samples[i,5] = sig.sample
+}
 ```
+
+
 
 
 
