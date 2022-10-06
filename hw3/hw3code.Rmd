@@ -1,0 +1,182 @@
+---
+title: "hw3code"
+author: "Han-Yuan Hsu"
+date: '2022-10-04'
+output: pdf_document
+---
+```{r}
+set.seed(111)
+```
+
+# 1
+A noisy measurement device is being examined for understanding the distribution of
+the errors that are being produced by it. Suppose that ten measurements led to the
+following observations on the errors made by the device:
+```{r}
+err = c(-0.69, -4.26, 0.14, -0.86, 0.42, 24.21, 0.51, -1.23, 2.30, 4.15)
+```
+
+## a
+```{r}
+lik1 = function(sigma) {
+  if (sigma==0) {return(0)} # the formula below is undefined for sigma=0, but the limit is 0
+  
+  1/(sqrt(2*pi)*sigma)^10 * exp(-sum(err^2)/2/sigma^2)
+}
+
+lik2 = function(sigma) {
+  if (sigma==0) {return(0)}
+  
+  1/(2*sigma)^10 * exp(-sum(abs(err))/sigma)
+}
+
+lik3 = function(sigma) {
+  prod = 1
+  for (i in 1:10) {
+    term = sigma / (err[i]^2 + sigma^2) / pi 
+    prod = prod * term
+  }
+  prod
+}
+```
+
+
+The range of the integrals is $(e^{-15}, e^{15})$, but $e^{15}$ is too large for numerical integration. The following shows integrating up to 100 does a good approximation:
+```{r}
+lik1(100)
+lik2(100)
+lik3(100)
+```
+
+
+```{r}
+res = .001
+my.grid = seq(exp(-15), 100+exp(-15), by=res)
+
+lik1.vals = sapply(my.grid, FUN=lik1)
+evid1 = 1/30 * sum(lik1.vals / my.grid) * res
+
+lik2.vals = sapply(my.grid, FUN=lik2)
+evid2 = 1/30 * sum(lik2.vals / my.grid) * res
+
+lik3.vals = sapply(my.grid, FUN=lik3)
+evid3 = 1/30 * sum(lik3.vals / my.grid) * res
+
+```
+
+The evidences:
+```{r}
+evid1
+evid2
+evid3
+```
+
+
+## b
+Normalize the three evidences to obtain posterior probabilities for the three models.
+Which model has the highest posterior probability? Comment on whether
+your results seem intutively sensible. (2 points).
+
+```{r}
+normalizing.const = evid1 + evid2 + evid3
+evid1 / normalizing.const
+evid2 / normalizing.const
+evid3 / normalizing.const
+```
+Model 3 has the highest posterior probability. That makes sense -- Cauchy distribution has the fattest tail compared with the distrbutions of the other two models that decay exponentially. The error data has an outlier 24.21, so a heavy-tail distribtuion makes this outlier more possible. 
+
+# 2
+```{r}
+dat = read.csv('HW3Data153Fall2022.csv')
+head(dat)
+n = length(dat$x)
+```
+```{r}
+plot(dat$x, dat$y)
+```
+
+
+
+## a
+Numerically calculate the Evidence for each of these models given the observed
+data. Report the normalized evidences. Which model has the highest evidence and
+what is the value of this highest evidence? (6 points)
+
+```{r}
+beta0.vals = seq(-10, 10, by=.1)
+beta1.vals = seq(-10, 10, by=.1)
+sig.vals = exp(seq(-10, 10, by=.1))
+vals.length = length(beta0.vals)
+
+loglik1 = function(param) {
+  b0 = param[1]; b1 = param[2]; sig = param[3]
+  n*(log(sig)-log(pi)) - sum(log((dat$y - b1*dat$x - b0)^2 + sig^2))
+}
+
+loglik2 = function(param) {
+  b0 = param[1]; b1 = param[2]; sig = param[3]
+  -n*log(2*sig) - sum(abs(dat$y - b1*dat$x - b0))/sig
+}
+
+loglik3 = function(param) {
+  b0 = param[1]; sig = param[2]
+  n*(log(sig)-log(pi)) - sum(log((dat$y - b0)^2 + sig^2))
+}
+
+loglik4 = function(b0, sig) {
+  b0 = param[1]; sig = param[2]
+  -n*log(2*sig) - sum(abs(dat$y - b0))/sig
+}
+```
+
+expand grid and apply loglik1
+subtract max
+exp
+normalize
+
+```{r}
+vals = expand.grid(beta0.vals, beta1.vals, sig.vals)
+```
+```{r}
+loglik1.vals = apply(vals, MARGIN=1, FUN=loglik1) # takes 3 minutes
+```
+```{r}
+loglik1.vals.max = max(loglik1.vals)
+loglik1.vals = loglik1.vals - loglik1.vals.max
+lik1.vals = exp(loglik1.vals)
+```
+```{r}
+evid1 = sum(lik1.vals)
+```
+
+```{r}
+loglik2.vals = apply(vals, MARGIN=1, FUN=loglik2)
+loglik3.vals = apply(vals, MARGIN=1, FUN=loglik3) # THIS HAS BUG
+save(loglik2.vals, file='loglik2.vals.RData')
+save(loglik3.vals, file='loglik3.vals.RData')
+```
+
+```{r}
+save(loglik1.vals, file='loglik1.vals.RData')
+```
+
+
+```{r}
+apply(vals, MARGIN=1, FUN=sum)
+```
+
+
+
+```{r}
+evid1 = 0
+for (b0 in beta0.vals) {
+  for (b1 in beta1.vals) {
+    for (sig in sig.vals) {
+      evid1 = evid1 + loglik1(b0, b1, sig)*
+    }
+  }
+}
+```
+
+
+

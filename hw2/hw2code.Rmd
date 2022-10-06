@@ -44,7 +44,7 @@ The peak at 13 suggests that there is a seasonal pattern with period roughly
 ```{r}
 n / 13
 ```
-but the frequency need not be exactly 13/n, as we can see some leakages around the spike at j=13.
+but the frequency need not be exactly 13/n, as we can see some leakage around the spike at j=13.
 
 ## b
 To this dataset, fit the model:
@@ -245,8 +245,8 @@ post.pmf = values / sum(values)
 ```
 
 We will create N=2000 iid samples of the posterior $(\vec\beta, c)$. We achieve that by the posterior distribution of c and the distribution of $\vec\beta$ conditioned on the data $\vec y$ and $c$. We already know the posterior distribution of c from part a. We can also derive the distribution of $\vec\beta \, |\, \vec y, c$ as follows: the model becomes linear in $\vec\beta$ when $c$ is fixed, and moreover, the prior distribution of $\vec\beta, \log\sigma$ conditioned on $c$ is still uniform because $c$ is assumed to be independent of $\vec\beta, \log\sigma$. Hence we can directly apply the results for linear models we learned in previous lectures and conclude that $\vec\beta \, |\, \vec y, c$ follows the multivariate t distribution
-$$t_{n-2}\big(\hat\beta, \; \hat\sigma^2(X'X)^{-1}\big).$$
-Note the parameters $\hat\beta$ and $\hat\sigma^2(X'X)^{-1}\big$ now depend on $c$. 
+$$t_{n-2}\left(\hat\beta, \; \hat\sigma^2(X'X)^{-1}\right).$$
+Note the parameters $\hat\beta$ and $\hat\sigma^2(X'X)^{-1}$ now depend on $c$. 
 
 Thus, if a random variable C follows the distribution of the posterior c and a random vector $\vec B$ follows the multivariate t distribution above (which depends on C), then the joint, $(\vec B, C)$, will follow the distribution of the desired posterior $(\vec\beta, c)$ by the product rule of probability distributions.
 
@@ -277,21 +277,23 @@ for(i in 1:N)
 }
 ```
 
-
+The estimate of $\mu_0$ (using mean) and its 95% confidence interval are given below:
 ```{r}
-summary(post.samples[, 2])
-summary(post.samples[, 3])
-var(post.samples[, 2])
-```
-
-CI??????????????????????????????????????
-
-```{r}
-1/sqrt(.288*.05*225) # for chebyshev inequality CI
-```
-```{r}
+mean(post.samples[,2])
 quantile(post.samples[, 2], c(.025, .975))
 ```
+
+The estimate of $\mu_1$ (using mean) and its 95% confidence interval are given below:
+```{r}
+mean(post.samples[,3])
+quantile(post.samples[, 3], c(.025, .975))
+```
+
+
+```{r, include=F}
+1/sqrt(.288*.05*225) # for chebyshev inequality CI
+```
+
 
 
 ## c
@@ -313,20 +315,24 @@ y = golf[,2]
 n = length(y)
 t = 1:n
 ```
+
+Below is the plot of the time series data:
 ```{r}
 plot(t, y, type='l')
-
-n_half = as.integer(n/2)
-pgram = abs(fft(y)[2:50])^2 / n # peaks at 19
-plot(pgram, type='h')
-225/19 # roughly 12. As expected, we have yearly trend
 ```
 
 ## a
 Provide a point estimate and a 95% uncertainty interval for the unknown frequency
 parameter f. (4 points)
 
-Guess f near 1/12
+To narrow down the search for the estimate for f, let's guess f through the periodogram of the data.
+```{r}
+n_half = as.integer(n/2)
+pgram = abs(fft(y)[2:50])^2 / n 
+plot(pgram, type='h') # peaks at 19
+225/19 # roughly 12. As expected, we have yearly trend
+```
+We conclude that f should be near 1/12.
 
 ```{r}
 log.post.f = function(f) {
@@ -342,36 +348,34 @@ log.post.f = function(f) {
 }
 ```
 
-
+Plot the graph of log.post on the interval $(1/14, 1/12)$, which is a small neighborhood of our guess for f, 1/12:
 ```{r}
 x = seq(10, 14, by=.01)
-plot(1/x, as.numeric(lapply(1/x, FUN=log.post.f)), type='l')
+plot(1/x, sapply(1/x, FUN=log.post.f), type='l', ylab='log posterior pdf of f (up to constant)')
 ```
+Our estimate for f, `f.hat`, will be the posterior maximizer:
 ```{r}
 opt = optimize(log.post.f, interval=c(.080, .085), maximum = T)
 f.hat = opt$maximum
 log.post.f.max = opt$objective
 ```
-
+Note the reciprocal of f.hat is close to 12:
 ```{r}
-x = seq(10, 14, by=.01)
-plot(1/x, as.numeric(lapply(1/x, FUN=function(f) {
-  log.post.f(f) - log.post.f.max
-})), type='l', ylab='log posterior pdf of f (up to constant)')
+1/f.hat # very close to 12
 ```
+
+Next, we calculate the posterior pdf of f from `log.post.f`. But we need the normalizing constant, which requires integrating over the range on which f is defined. We will grid f and calculate the Riemann sum to approximate such integration, and to achieve a finer grid resolution, we only integrate over the range (f.hat-.0005, f.hat+.0005) because as the code cell below shows, the posterior pdf of f is negligible outside this range:
 ```{r}
 log.post.f(f.hat-.0005) - log.post.f.max
 log.post.f(f.hat+.0005) - log.post.f.max
+exp(-32.55008)
 ```
-
-
 
 ```{r}
 post.f.0 = function(f) { # posterior f but not normalized
   exp(log.post.f(f) - log.post.f.max)
 }
 
-#post.f.vector = c(rep(0, length(my.grid))) # cache posterior pdf of f to avoid recomputing
 radius = .0005
 res = radius/500 # resolution
 my.grid = seq(f.hat-radius, f.hat+radius, by=res) # the posterior pdf of f is negligible outside this range
@@ -380,30 +384,19 @@ total.integral = 0
 for (x in my.grid) {
   value = post.f.0(x)
   total.integral = total.integral + res*value
-  
-  # cache
-  #post.f.vector
 }
-
-
 
 post.f = function(f) {
   post.f.0(f) / total.integral
 }
 ```
 
-
-
-Our point estimate is `f.hat`:
-```{r}
-1/f.hat # very close to 12
-```
 Plot of posterior pdf of f:
 ```{r}
 post.f.grid = sapply(my.grid, FUN=post.f)
 plot(my.grid, post.f.grid, type='l', ylab='posterior pdf of f')
 ```
-95% confidence interval:
+95% confidence interval for f:
 ```{r}
 d = res
 ci.integral = res*post.f(f.hat)
@@ -415,26 +408,19 @@ c(f.hat-d, f.hat+d)
 ```
 
 
-```{r}
+```{r, include=F}
 post.f(1/12) # 1/12 is even better than f.hat, kind of weird
 post.f(f.hat)
 ```
-
-
-```{r}
+```{r, include=F}
 # gridding 
 # consider fixed sequence of values
 # 1/12 +- 0.0001*2^n
 # see the pdfs each term of the sequence maps
 
 ```
-
-
-
-
-
-```{r}
-integrate(log.post.f, lower=f.hat-.001, f.hat+.001) # weird error
+```{r, include=F}
+#integrate(log.post.f, lower=f.hat-.001, f.hat+.001) # weird error
 ```
 
 ## b
@@ -574,7 +560,7 @@ from https://fred.stlouisfed.org/series/TTLCONS. This gives monthly seasonally
 adjusted data on total construction spending in the United States in millions of
 dollars from January 1993 to July 2022. To this dataset, fit the model:
 $$Y_t = \beta_0 + \beta_1 t + \beta_2 (t-s_1)_+ + \beta_3 (t-s_2)_+ + Z_t$$
-with $Z_t$ i.i.d ∼ $N(0, \sigma^2)$. 
+with $Z_t$ i.i.d $\sim N(0, \sigma^2)$. 
 
 ```{r}
 df = read.csv('TTLCONS.csv')
@@ -789,6 +775,7 @@ quantile(post.samples[,6], c(.025, .975))
 
 ## c
 Comment on whether the model is appropriate for this dataset. (2 points).
+
 Visually, the model fits the data well. But in terms of forecasting, this model is bad; its future predictions will all be linear, while in reality, another change-of-slope point may occur. 
 
 ```{r, include=F}
@@ -857,9 +844,9 @@ To the logarithmed data, fit the model
 $$y_i = g(t_i) + Z_i$$
 where $Z_i$ are iid $\sim N(0, \sigma^2)$ and 
 $$g(t) = \beta_0 + \beta_1t
-+ \beta_2 \cos(2πf_1t) + \beta_3 \sin(2πf_1t)
-+ \beta_4 \cos(2πf_2t) + \beta_5 \sin(2πf_2t)
-+ \beta_6 \cos(2πf_3t) + \beta_7 \sin(2πf_3t).$$
++ \beta_2 \cos(2\pi f_1t) + \beta_3 \sin(2\pi f_1t)
++ \beta_4 \cos(2\pi f_2t) + \beta_5 \sin(2\pi f_2t)
++ \beta_6 \cos(2\pi f_3t) + \beta_7 \sin(2\pi f_3t).$$
 
 Treat the betas, f's, and sigma as unknown parameters and estimate them from
 data. Plot your estimate of g (and appropriate uncertainty indicators) along with
