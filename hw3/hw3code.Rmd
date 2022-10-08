@@ -5,6 +5,7 @@ date: '2022-10-04'
 output: pdf_document
 ---
 ```{r}
+library(dplyr)
 set.seed(111)
 ```
 
@@ -85,6 +86,7 @@ evid3 / normalizing.const
 ```
 Model 3 has the highest posterior probability. That makes sense -- Cauchy distribution has the fattest tail compared with the distrbutions of the other two models that decay exponentially. The error data has an outlier 24.21, so a heavy-tail distribtuion makes this outlier more possible. 
 
+\newpage
 # 2
 ```{r}
 dat = read.csv('HW3Data153Fall2022.csv')
@@ -123,7 +125,7 @@ loglik3 = function(param) {
   n*(log(sig)-log(pi)) - sum(log((dat$y - b0)^2 + sig^2))
 }
 
-loglik4 = function(b0, sig) {
+loglik4 = function(param) {
   b0 = param[1]; sig = param[2]
   -n*log(2*sig) - sum(abs(dat$y - b0))/sig
 }
@@ -138,45 +140,157 @@ normalize
 vals = expand.grid(beta0.vals, beta1.vals, sig.vals)
 ```
 ```{r}
-loglik1.vals = apply(vals, MARGIN=1, FUN=loglik1) # takes 3 minutes
+#loglik1.vals = apply(vals, MARGIN=1, FUN=loglik1) # takes 3 minutes
+#save(loglik1.vals, file='loglik1.vals.RData')
+load(file='loglik1.vals.RData')
 ```
 ```{r}
 loglik1.vals.max = max(loglik1.vals)
 loglik1.vals = loglik1.vals - loglik1.vals.max
-lik1.vals = exp(loglik1.vals)
-```
-```{r}
-evid1 = sum(lik1.vals)
+lik1.vals = exp(loglik1.vals) # the true likelihood values should be this times exp(loglik1.vals.max)
 ```
 
+Below, the true evidence of model 1 is proportional to `evid1.scaled` times exp(`loglik1.vals.max`), where
+the proportionality constant is the same for all four models. So, to choose the best model, we find the largest `evidm.scaled` times exp(`loglikm.vals.max`) for m=1,2,3,4.
 ```{r}
-loglik2.vals = apply(vals, MARGIN=1, FUN=loglik2)
-loglik3.vals = apply(vals, MARGIN=1, FUN=loglik3) # THIS HAS BUG
-save(loglik2.vals, file='loglik2.vals.RData')
-save(loglik3.vals, file='loglik3.vals.RData')
+evid1.scaled = sum(lik1.vals) # I didn't multiply the prior here because it is the same for all 4 models
+evid1.scaled
+loglik1.vals.max
 ```
 
 ```{r}
-save(loglik1.vals, file='loglik1.vals.RData')
+#loglik2.vals = apply(vals, MARGIN=1, FUN=loglik2)
+#save(loglik2.vals, file='loglik2.vals.RData')
+load(file='loglik2.vals.RData')
+```
+
+```{r}
+loglik2.vals.max = max(loglik2.vals)
+loglik2.vals = loglik2.vals - loglik2.vals.max
+lik2.vals = exp(loglik2.vals) # the true likelihood values should be this times exp(loglik2.vals.max)
+```
+```{r}
+evid2.scaled = sum(lik2.vals)
+evid2.scaled
+loglik2.vals.max
 ```
 
 
 ```{r}
-apply(vals, MARGIN=1, FUN=sum)
+vals2 = expand.grid(beta0.vals, sig.vals)
 ```
-
-
 
 ```{r}
-evid1 = 0
-for (b0 in beta0.vals) {
-  for (b1 in beta1.vals) {
-    for (sig in sig.vals) {
-      evid1 = evid1 + loglik1(b0, b1, sig)*
-    }
-  }
-}
+#loglik3.vals = apply(vals2, MARGIN=1, FUN=loglik3)
+#save(loglik3.vals, file='loglik3.vals.RData')
+#loglik4.vals = apply(vals2, MARGIN=1, FUN=loglik4)
+#save(loglik4.vals, file='loglik4.vals.RData')
+load('loglik3.vals.RData')
+load('loglik4.vals.RData')
 ```
+
+```{r}
+loglik3.vals.max = max(loglik3.vals)
+loglik3.vals = loglik3.vals - loglik3.vals.max
+lik3.vals = exp(loglik3.vals) # the true likelihood values should be this times exp(loglik3.vals.max)
+```
+```{r}
+evid3.scaled = sum(lik3.vals)
+evid3.scaled
+loglik3.vals.max
+```
+```{r}
+loglik4.vals.max = max(loglik4.vals)
+loglik4.vals = loglik4.vals - loglik4.vals.max
+lik4.vals = exp(loglik4.vals) # the true likelihood values should be this times exp(loglik3.vals.max)
+```
+```{r}
+evid4.scaled = sum(lik4.vals)
+evid4.scaled
+loglik4.vals.max
+```
+
+Calculate normalized evidences:
+```{r}
+evid1 = evid1.scaled
+evid2 = evid2.scaled * exp(loglik2.vals.max - loglik1.vals.max)
+evid3 = evid3.scaled * exp(loglik3.vals.max - loglik1.vals.max)
+evid4 = evid4.scaled * exp(loglik4.vals.max - loglik1.vals.max)
+normalizing.const = evid1 + evid2 + evid3 + evid4
+evid1 = evid1 / normalizing.const
+evid2 = evid2 / normalizing.const
+evid3 = evid3 / normalizing.const
+evid4 = evid4 / normalizing.const
+```
+```{r}
+evid1 # should be almost 1
+evid2
+evid3
+evid4
+```
+Model 1 has the highest evidence, with an evidence almost 1 because the evidences for other models are very small.
+
+## b
+```{r}
+ind.max = which.max(loglik1.vals)
+beta0.hat = vals[ind.max, 1]
+beta1.hat = vals[ind.max, 2]
+sig.hat = vals[ind.max, 3]
+```
+```{r}
+beta0.hat
+beta1.hat
+sig.hat
+```
+Below, the red line is $\hat\beta_0 + \hat\beta_1 x$:
+```{r}
+plot(dat$x, dat$y)
+abline(beta0.hat, beta1.hat, col='red')
+```
+
+To get uncertainty quantification for the parameters, we sample from the posterior distribution:
+```{r}
+N = 1000000
+post.pdf = lik1.vals / sum(lik1.vals) # posterior pdf of beta0, beta1, sigma
+ind.samples = sample(1:nrow(vals), N, replace=T, prob=post.pdf)
+beta0.samples = vals[ind.samples, 1]
+beta1.samples = vals[ind.samples, 2]
+sig.samples = vals[ind.samples, 3]
+```
+
+Below are the probabilities of each parameter equaling its estimator:
+```{r}
+sum(beta0.samples == beta0.hat) / length(beta0.samples)
+sum(beta1.samples == beta1.hat) / length(beta1.samples)
+sum(sig.samples == sig.hat) / length(sig.samples)
+```
+Below is a 95% credibility interval for sigma:
+```{r}
+quantile(sig.samples, c(.025, .975))
+```
+\newpage
+# 3
+R has an inbuilt dataset called state which gives some data on 50 states in America
+from the 1970s. You can access this dataset via (see help(state) for information
+about the data)
+We want to fit a linear model to this dataset with life expectancy as the response
+variable and some subset of the remaining seven explanatory variables (including the
+intercept term). Your goal is to figure out which subset of the explanatory variables
+provides the best explanation for the response variable in a linear model.
+
+```{r}
+data(state); dt = data.frame(state.x77, row.names = state.abb)
+head(dt)
+```
+
+
+## a
+Use the Evidence-based Bayesian model selection method from Lecture 11 to
+calculate the evidences for each of the 2^7 = 128 models (obtaining by taking all
+possible subsets of the explanatory variables along with the intercept term). How
+many of the 128 models get nontrivial Evidences (after normalization so that the
+Evidences sum to one)? Describe the models getting high evidences? Do the
+results of your analysis seem sensible? (6 points)
 
 
 
