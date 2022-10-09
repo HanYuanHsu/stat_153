@@ -8,6 +8,7 @@ output: pdf_document
 library(dplyr)
 set.seed(111)
 ```
+Reference: lecture code
 
 # 1
 A noisy measurement device is being examined for understanding the distribution of
@@ -291,6 +292,214 @@ possible subsets of the explanatory variables along with the intercept term). Ho
 many of the 128 models get nontrivial Evidences (after normalization so that the
 Evidences sum to one)? Describe the models getting high evidences? Do the
 results of your analysis seem sensible? (6 points)
+
+```{r}
+#y = dt$Life.Exp
+g <- lm(Life.Exp ~ ., data=dt)
+summary(g)
+```
+
+`all01` below indexes subsets of the features in a 1/0 fashion.
+```{r}
+fullX = model.matrix(g)
+numvar = 7
+all01 = expand.grid(replicate(numvar, 0:1, simplify = FALSE))
+all01 = cbind(rep(1, nrow(all01)), all01)
+colnames(all01) = colnames(fullX)
+logEvid = rep(-1, nrow(all01))
+```
+```{r}
+head(all01)
+```
+
+The following calculates the log evidence for each model `mm` in `all01`:
+```{r}
+for(mm in 1:nrow(all01))
+{
+    inds = all01[mm,]
+    Xmat = fullX[,(inds == 1)]
+    if(mm == 1) {
+      # this is the model with the intercept only, which is a trivial case
+      # if we don't run this if statement, weird bugs happen
+      Xmat = as.matrix(rep(1, nrow(dt)), nrow=nrow(dt), ncol=1)
+    }
+    p = ncol(Xmat)
+    n = nrow(Xmat)
+    md = lm(dt$Life.Exp ~ -1 + Xmat)
+    # the following log evidence formula for model mm comes from lecture 11 notes.
+    logEvid[mm] = (lgamma(p/2)) - ((p/2)*(log((sum(md$fitted.values^2))))) + (lgamma((n-p-1)/2)) - (((n-p)/2)*(log((sum(md$residuals^2))/2)))
+}
+```
+
+The first 10 models with highest evidence:
+```{r}
+logEvid.sorted = sort(logEvid, decreasing = T, index.return=T)
+r = 10 # show first r models
+high.evid.ind = logEvid.sorted$ix[1:r]
+all01[high.evid.ind, ]
+```
+```{r, include=F}
+explain.var.names = colnames(all01) # names of explainatory variables
+
+logEvid.sorted = sort(logEvid, decreasing = T, index.return=T)
+r = 10 # show first r models
+high.evid.ind = logEvid.sorted$ix[1:r]
+for (i in 1:r) {
+  features01 = all01[high.evid.ind[i], ]
+  print(explain.var.names[as.logical(features01)])
+}
+```
+All of these 10 models include the murder feature, which makes sense because in the summary of the model `g` that uses all the features, we see that only murder is very significant. Also, it turns out models with fewer features are preferred, which makes sense because the evidence formula we use here penalizes models with a large number of features. Indeed, the best model only has one feature, which is murder of course. The second-best model includes HS.Grad feature, which also makes sense because the feature has the second best significance level, as shown in the summary of `g`.
+
+Get normalized evidences from log evidences:
+```{r}
+evid = logEvid - max(logEvid)
+evid = exp(evid)
+evid = evid / sum(evid)
+```
+
+
+## b and c
+Calculate the best model (among the 128 possible models) using the BIC. Compare
+this model with the models obtaining high evidence from part (a). (3 points)
+Calculate the best model (among the 128 possible models) using the AIC. Compare
+this model with the models obtaining high evidence from part (a). (3 points)
+
+```{r}
+bic = rep(-9999, nrow(all01))
+aic = rep(-9999, nrow(all01))
+for(mm in 1:nrow(all01))
+{
+    inds = all01[mm,]
+    Xmat = fullX[,(inds == 1)]
+    if(mm == 1) {
+      # this is the model with the intercept only, which is a trivial case
+      # if we don't run this if statement, weird bugs happen
+      Xmat = as.matrix(rep(1, nrow(dt)), nrow=nrow(dt), ncol=1)
+    }
+    p = ncol(Xmat)+1 # number of parameters, betas AND sigma
+    n = nrow(Xmat)
+    md = lm(dt$Life.Exp ~ -1 + Xmat)
+    sig.hat.squared = sum((md$residuals)^2) / n
+    bic[mm] = n + n*log(2*pi*sig.hat.squared) + p*log(n)
+    aic[mm] = n + n*log(2*pi*sig.hat.squared) + p*2
+}
+```
+
+
+```{r}
+bic.sorted = sort(bic, decreasing = T, index.return=T)
+high.bic.ind = bic.sorted$ix[1:10]
+all01[high.bic.ind, ]
+```
+
+
+Completely different from evidence-based model selection...
+
+```{r}
+aic.sorted = sort(aic, decreasing = T, index.return=T)
+high.aic.ind = aic.sorted$ix[1:r]
+all01[high.aic.ind, ]
+```
+
+
+
+```{r, include=F}
+logEvid.sorted$x[bic.sorted$ix[1:10]]
+```
+
+
+
+
+
+
+```{r}
+logEvid.ind = logEvid.sorted$ix[1:30]
+plot(logEvid.ind, bic[logEvid.ind])
+
+```
+
+
+\newpage
+# 4
+Download the google trends time series dataset for the query yahoo. This should be
+a monthly time series dataset that indicates the search popularity of this query from
+January 2004 to August 2022. The goal of this exercise is to use model selection to
+figure out the best polynomial trend model among the degrees k = 1, 2, 3, 4, 5, 6, 7, 8. To prevent numerical instability issues, take x_i to be some scaled version of time (for example, take x_i = i/n).
+```{r}
+yahoo <- read.csv('../hw1/yahoo.csv', header=T, skip=1)
+colnames(yahoo) = c('Month', 'y')
+yahoo <- yahoo[1:(nrow(yahoo)-1), ] # drop last row, which corresponds to Sep 2022
+#yahoo.ts <- ts(yahoo$y, start = c(2004, 1), end = c(2022, 8), frequency = 12)
+head(yahoo)
+n = length(yahoo$y) # time series length
+```
+```{r}
+x = c(1:n) / n # scaled time
+y = yahoo$y
+```
+
+
+## a
+Use the Evidence-based Bayesian model selection method from Lecture 11 to
+calculate the evidences for each of the above 8 models. Report the normalized
+evidences of each of the 8 models. Which model has the highese evidence? Does
+this model selection method select models that seemings overfit? (6 points)
+```{r}
+num.models = 8
+logEvid = rep(-1, num.models)
+
+Xmat = matrix(rep(1, n), nrow=n)
+for(mm in 1:num.models)
+{
+    Xmat = cbind(Xmat, x^mm)
+    p = ncol(Xmat) # here, p is the number of betas only
+    md = lm(y ~ -1 + Xmat)
+    # the following log evidence formula for model mm comes from lecture 11 notes.
+    logEvid[mm] = (lgamma(p/2)) - ((p/2)*(log((sum(md$fitted.values^2))))) + (lgamma((n-p-1)/2)) - (((n-p)/2)*(log((sum(md$residuals^2))/2)))
+    
+}
+```
+
+```{r}
+which.max(logEvid)
+```
+7 is chosen, which is large!!! 
+
+
+## b and c
+Calculate the best model using the BIC and the AIC. Compare this model with the models
+obtaining high evidence from part (a).
+
+```{r}
+bic = rep(-9999, num.models)
+aic = rep(-9999, num.models)
+Xmat = matrix(rep(1, n), nrow=n)
+for(mm in 1:num.models)
+{
+    Xmat = cbind(Xmat, x^mm)
+    md = lm(y ~ -1 + Xmat)
+    p = ncol(Xmat)+1 # number of parameters, betas AND sigma
+    sig.hat.squared = sum((md$residuals)^2) / n
+    bic[mm] = n + n*log(2*pi*sig.hat.squared) + p*log(n)
+    aic[mm] = n + n*log(2*pi*sig.hat.squared) + p*2
+}
+```
+
+```{r}
+which.min(bic)
+which.min(aic)
+```
+Both are same as what evidence gave!!!
+
+```{r}
+plot(1:n, y, type='l')
+```
+
+
+
+
+
 
 
 
