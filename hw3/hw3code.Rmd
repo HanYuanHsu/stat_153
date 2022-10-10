@@ -496,6 +496,132 @@ Both are same as what evidence gave!!!
 plot(1:n, y, type='l')
 ```
 
+\newpage
+# 5
+Download the FRED dataset on “Retail Sales: Beer, Wine, and Liquor Stores” from
+https://fred.stlouisfed.org/series/MRTSSM4453USN. This is a monthly dataset
+(the units are millions of dollars) and is not seasonally adjusted. To this data, we want
+to fit one of the models $M_{kl}$ where k ranges in 0, 1, 2, 3, 4, 5 and l ranges in 0, 1, 2, 3, 4, 5.
+
+```{r}
+alc = read.csv('alc.csv')
+y = alc[,2]
+n = length(y)
+```
+```{r}
+plot(1:n, y, type='l')
+```
+
+
+
+## a
+Use the Evidence-based Bayesian model selection method from Lecture 11 to
+calculate the evidences for each of the above 36 models. Report the normalized
+evidences of each of the 36 models. Which models have high evidence? Does this
+model selection method favor models that seemingly overfit? (6 points)
+
+```{r}
+k.vals = 0:5
+l.vals = 0:5
+logEvid = rep(-9999, 36)
+ind = 1 # index for accessing elements of logEvid
+
+Poly = matrix(rep(1, n), ncol=1) # polynomial part of the model matrix
+for (k in k.vals) {
+  Xmat = Poly
+  for (l in l.vals) {
+    p = ncol(Xmat)
+    md = lm(y ~ -1 + Xmat)
+    # the following log evidence formula for model mm comes from lecture 11 notes.
+    logEvid[ind] = (lgamma(p/2)) - ((p/2)*(log((sum(md$fitted.values^2))))) + (lgamma((n-p-1)/2)) - (((n-p)/2)*(log((sum(md$residuals^2))/2)))
+    
+    ind = ind + 1
+    Xmat = cbind(Xmat, cos(2*pi*(l+1)/12 * (1:n)))
+    Xmat = cbind(Xmat, sin(2*pi*(l+1)/12 * (1:n)))
+  }
+  Poly = cbind(Poly, ((1:n)/n)^(k+1))
+}
+```
+
+Below are the top 5 models with high evidence:
+```{r}
+logEvid.sorted = sort(logEvid, decreasing = T, index.return=T)
+ind = logEvid.sorted$ix[1:5]
+k.and.l = expand.grid(l.vals, k.vals)
+colnames(k.and.l) = c('l', 'k')
+k.and.l[ind,]
+```
+The best model, chosen by Bayesian evidence, has k=4 and l=5.
+
+Calculate evidences:
+```{r}
+logEvid.max = max(logEvid)
+logEvid = logEvid - logEvid.max
+evid = exp(logEvid)
+evid = evid / sum(evid)
+plot(1:36, evid, type='h')
+```
+The normalized evidence of the models with the highest evidence:
+```{r}
+evid[ind[1]]
+```
+Does this
+model selection method favor models that seemingly overfit?
+????????????????????????????
+?????????????????????????
+
+## b and c
+Calculate the best model using the BIC and AIC. Compare with the models
+obtaining high evidence from part (a).
+
+```{r}
+k.vals = 0:5
+l.vals = 0:5
+bic = rep(-9999, 36)
+aic = rep(-9999, 36)
+ind = 1 # index for accessing elements of logEvid
+
+Poly = matrix(rep(1, n), ncol=1) # polynomial part of the model matrix
+for (k in k.vals) {
+  Xmat = Poly
+  for (l in l.vals) {
+    p = ncol(Xmat)+1 # number of parameters, betas AND sigma
+    md = lm(y ~ -1 + Xmat)
+    sig.hat.squared = sum((md$residuals)^2) / n
+    bic[ind] = n + n*log(2*pi*sig.hat.squared) + p*log(n)
+    aic[ind] = n + n*log(2*pi*sig.hat.squared) + p*2
+    
+    ind = ind + 1
+    Xmat = cbind(Xmat, cos(2*pi*(l+1)/12 * (1:n)))
+    Xmat = cbind(Xmat, sin(2*pi*(l+1)/12 * (1:n)))
+  }
+  Poly = cbind(Poly, ((1:n)/n)^(k+1))
+}
+```
+
+```{r}
+plot(1:36, bic, type='l', xaxt='n', main='BIC')
+axis(side=1, at=(1:6)*6)
+```
+```{r}
+plot(1:36, aic, type='l', xaxt='n', main='AIC')
+axis(side=1, at=(1:6)*6)
+```
+```{r}
+k.and.l[which.min(bic), ] # best model chosen by bic
+k.and.l[which.min(aic), ] # best model chosen by aic
+```
+We see that BIC chooses the same model as Bayesian evidence does, whereas AIC chooses the model with a larger l, i.e. l=5. This makes sense because BIC penalizes models with many parameters. From the plots of BIC and AIC above, we see that BIC and AIC both favor large l, just like Bayesian Evidence.
+
+\newpage
+# 6
+A classic time series dataset is the Box and Jenkins airline passenger data (can be
+accessed in R via data(AirPassengers)). This gives monthly totals of international
+airline passengers from 1949 to 1960. There are n = 144 observations in total corresponding
+to 12 years.
+
+
+
 
 
 
