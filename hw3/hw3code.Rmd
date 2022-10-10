@@ -619,6 +619,83 @@ A classic time series dataset is the Box and Jenkins airline passenger data (can
 accessed in R via data(AirPassengers)). This gives monthly totals of international
 airline passengers from 1949 to 1960. There are n = 144 observations in total corresponding
 to 12 years.
+```{r}
+data(AirPassengers)
+```
+
+```{r}
+y = as.numeric(AirPassengers)
+n = length(y)
+plot(1:n, y, type='l', xaxt='n')
+axis(side=1, at=(1:12)*12)
+```
+
+```{r}
+2^19
+```
+```{r}
+# ready to run
+
+fullX = matrix(1, nrow=n, ncol=38) # 38 = 2 + 18*2
+fullX[,2] = 1:n
+for (k in 1:18) {
+  fullX[,2*k+1] = cos(2*pi*k/n*(1:n))
+  fullX[,2*k+2] = sin(2*pi*k/n*(1:n))
+}
+all01 = expand.grid(replicate(18, 0:1, simplify = FALSE))
+
+logEvid.M = rep(-9999, nrow(all01)) # log evidences for the models in M_S
+logEvid.L = rep(-9999, nrow(all01)) # log evidences for the models in LM_S
+```
+```{r}
+inds.init = rep(F, 38) # initial indices
+inds.init[1] = T; inds.init[2] = T
+for(mm in 1:nrow(all01))
+{
+  inds = inds.init
+  if(mm >= 2) { # excluding the case when all01 is all FALSE
+    where.true = (1:18)[as.logical(all01[mm,])]
+    inds[2 + 2*where.true-1] = T
+    inds[2 + 2*where.true] = T
+  }
+  
+  Xmat = fullX[,inds]
+  p = ncol(Xmat)
+  md = lm(y ~ -1 + Xmat)
+  # the following log evidence formula for model mm comes from lecture 11 notes.
+  logEvid.M[mm] = (lgamma(p/2)) - ((p/2)*(log((sum(md$fitted.values^2))))) + (lgamma((n-p-1)/2)) - (((n-p)/2)*(log((sum(md$residuals^2))/2)))
+  
+  md = lm(log(y) ~ -1 + Xmat)
+  logEvid.L[mm] = (lgamma(p/2)) - ((p/2)*(log((sum(md$fitted.values^2))))) + (lgamma((n-p-1)/2)) - (((n-p)/2)*(log((sum(md$residuals^2))/2)))
+}
+```
+```{r}
+as.logical(all01[1,])
+(1:18)[as.logical(all01[1,])]
+```
+
+
+
+```{r}
+
+    
+    inds = all01[mm,]
+    Xmat = fullX[,(inds == 1)]
+    if(mm == 1) {
+      # this is the model with the intercept only, which is a trivial case
+      # if we don't run this if statement, weird bugs happen
+      Xmat = as.matrix(rep(1, nrow(dt)), nrow=nrow(dt), ncol=1)
+    }
+    p = ncol(Xmat)
+    n = nrow(Xmat)
+    md = lm(dt$Life.Exp ~ -1 + Xmat)
+    # the following log evidence formula for model mm comes from lecture 11 notes.
+    logEvid[mm] = (lgamma(p/2)) - ((p/2)*(log((sum(md$fitted.values^2))))) + (lgamma((n-p-1)/2)) - (((n-p)/2)*(log((sum(md$residuals^2))/2)))
+```
+
+
+
+
 
 
 
