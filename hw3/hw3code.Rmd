@@ -19,6 +19,7 @@ err = c(-0.69, -4.26, 0.14, -0.86, 0.42, 24.21, 0.51, -1.23, 2.30, 4.15)
 ```
 
 ## a
+Calculate the evidences of each of the above three models, given the observed data.
 ```{r}
 lik1 = function(sigma) {
   if (sigma==0) {return(0)} # the formula below is undefined for sigma=0, but the limit is 0
@@ -85,7 +86,7 @@ evid1 / normalizing.const
 evid2 / normalizing.const
 evid3 / normalizing.const
 ```
-Model 3 has the highest posterior probability. That makes sense -- Cauchy distribution has the fattest tail compared with the distrbutions of the other two models that decay exponentially. The error data has an outlier 24.21, so a heavy-tail distribtuion makes this outlier more possible. 
+Model 3 has the highest posterior probability. That makes sense -- Cauchy distribution has the fattest tail compared with the distrbutions of the other two models that decay exponentially. The error data has an outlier 24.21, so a heavy-tailed distribtuion makes this outlier more possible. 
 
 \newpage
 # 2
@@ -101,9 +102,7 @@ plot(dat$x, dat$y)
 
 
 ## a
-Numerically calculate the Evidence for each of these models given the observed
-data. Report the normalized evidences. Which model has the highest evidence and
-what is the value of this highest evidence? (6 points)
+Numerically calculate the Evidence for each of these models given the observed data. Report the normalized evidences. Which model has the highest evidence and what is the value of this highest evidence? (6 points)
 
 ```{r}
 beta0.vals = seq(-10, 10, by=.1)
@@ -131,20 +130,19 @@ loglik4 = function(param) {
   -n*log(2*sig) - sum(abs(dat$y - b0))/sig
 }
 ```
-
-expand grid and apply loglik1
-subtract max
-exp
-normalize
-
 ```{r}
 vals = expand.grid(beta0.vals, beta1.vals, sig.vals)
 ```
+
+We apply our log likelihood functions to the possible values (`vals` or `vals2`) to get `loglik1.vals`, `loglik2.vals`, etc.
+```{r, eval=FALSE}
+loglik1.vals = apply(vals, MARGIN=1, FUN=loglik1) # takes 3 minutes
+save(loglik1.vals, file='loglik1.vals.RData')
+```
 ```{r}
-#loglik1.vals = apply(vals, MARGIN=1, FUN=loglik1) # takes 3 minutes
-#save(loglik1.vals, file='loglik1.vals.RData')
 load(file='loglik1.vals.RData')
 ```
+
 ```{r}
 loglik1.vals.max = max(loglik1.vals)
 loglik1.vals = loglik1.vals - loglik1.vals.max
@@ -156,12 +154,13 @@ the proportionality constant is the same for all four models. So, to choose the 
 ```{r}
 evid1.scaled = sum(lik1.vals) # I didn't multiply the prior here because it is the same for all 4 models
 evid1.scaled
-loglik1.vals.max
 ```
 
+```{r, eval=FALSE}
+loglik2.vals = apply(vals, MARGIN=1, FUN=loglik2)
+save(loglik2.vals, file='loglik2.vals.RData')
+```
 ```{r}
-#loglik2.vals = apply(vals, MARGIN=1, FUN=loglik2)
-#save(loglik2.vals, file='loglik2.vals.RData')
 load(file='loglik2.vals.RData')
 ```
 
@@ -173,19 +172,21 @@ lik2.vals = exp(loglik2.vals) # the true likelihood values should be this times 
 ```{r}
 evid2.scaled = sum(lik2.vals)
 evid2.scaled
-loglik2.vals.max
 ```
 
+Now for model 3 and 4:
 
 ```{r}
 vals2 = expand.grid(beta0.vals, sig.vals)
 ```
 
+```{r, eval=FALSE}
+loglik3.vals = apply(vals2, MARGIN=1, FUN=loglik3)
+save(loglik3.vals, file='loglik3.vals.RData')
+loglik4.vals = apply(vals2, MARGIN=1, FUN=loglik4)
+save(loglik4.vals, file='loglik4.vals.RData')
+```
 ```{r}
-#loglik3.vals = apply(vals2, MARGIN=1, FUN=loglik3)
-#save(loglik3.vals, file='loglik3.vals.RData')
-#loglik4.vals = apply(vals2, MARGIN=1, FUN=loglik4)
-#save(loglik4.vals, file='loglik4.vals.RData')
 load('loglik3.vals.RData')
 load('loglik4.vals.RData')
 ```
@@ -198,7 +199,6 @@ lik3.vals = exp(loglik3.vals) # the true likelihood values should be this times 
 ```{r}
 evid3.scaled = sum(lik3.vals)
 evid3.scaled
-loglik3.vals.max
 ```
 ```{r}
 loglik4.vals.max = max(loglik4.vals)
@@ -208,10 +208,16 @@ lik4.vals = exp(loglik4.vals) # the true likelihood values should be this times 
 ```{r}
 evid4.scaled = sum(lik4.vals)
 evid4.scaled
-loglik4.vals.max
 ```
 
-Calculate normalized evidences:
+Below, we calculate the normalized evidences. Note that among `loglik1.vals.max`, `loglik2.vals.max`, `loglik3.vals.max`, and `loglik4.vals.max`, `loglik1.vals.max` is the largest:
+```{r}
+loglik1.vals.max
+loglik2.vals.max
+loglik3.vals.max
+loglik4.vals.max
+```
+So when we calculate `evidm.scaled` times exp(`loglikm.vals.max`) for m=1,2,3,4 to choose the best model, we also divide all these numbers by exp(-`loglik1.vals.max`) to avoid issues in numerical computation.
 ```{r}
 evid1 = evid1.scaled
 evid2 = evid2.scaled * exp(loglik2.vals.max - loglik1.vals.max)
@@ -229,9 +235,13 @@ evid2
 evid3
 evid4
 ```
-Model 1 has the highest evidence, with an evidence almost 1 because the evidences for other models are very small.
+Model 1 has the highest evidence, which is almost 1 because the evidences of other models are very small.
 
 ## b
+For your chosen model, describe your best estimates of $\beta_0$, $\sigma$ and $\beta_1$ (if $\beta_1$ exists in the model) along with appropriate uncertainty quantification. Plot your best
+estimate of $\beta_0 + \beta_1 x$ on a plot of the data. (4 points)
+
+My estimators for the parameters are maximum likelihood estimators:
 ```{r}
 ind.max = which.max(loglik1.vals)
 beta0.hat = vals[ind.max, 1]
@@ -243,6 +253,7 @@ beta0.hat
 beta1.hat
 sig.hat
 ```
+
 Below, the red line is $\hat\beta_0 + \hat\beta_1 x$:
 ```{r}
 plot(dat$x, dat$y)
@@ -269,6 +280,8 @@ Below is a 95% credibility interval for sigma:
 ```{r}
 quantile(sig.samples, c(.025, .975))
 ```
+
+
 \newpage
 # 3
 R has an inbuilt dataset called state which gives some data on 50 states in America
@@ -392,9 +405,7 @@ bic.sorted = sort(bic, decreasing = T, index.return=T)
 high.bic.ind = bic.sorted$ix[1:10]
 all01[high.bic.ind, ]
 ```
-
-
-Completely different from evidence-based model selection...
+BIC chooses completely different models compared with Bayesian Evidence. In particular, the top models chosen by BIC do not use Murder. 
 
 ```{r}
 aic.sorted = sort(aic, decreasing = T, index.return=T)
@@ -402,22 +413,7 @@ high.aic.ind = aic.sorted$ix[1:r]
 all01[high.aic.ind, ]
 ```
 
-
-
-```{r, include=F}
-logEvid.sorted$x[bic.sorted$ix[1:10]]
-```
-
-
-
-
-
-
-```{r}
-logEvid.ind = logEvid.sorted$ix[1:30]
-plot(logEvid.ind, bic[logEvid.ind])
-
-```
+The models chosen by AIC are still completely different from those chosen by Bayesian evidence, but they are similar to those chosen by BIC. Again, no Murder.
 
 
 \newpage
@@ -441,10 +437,8 @@ y = yahoo$y
 
 
 ## a
-Use the Evidence-based Bayesian model selection method from Lecture 11 to
-calculate the evidences for each of the above 8 models. Report the normalized
-evidences of each of the 8 models. Which model has the highese evidence? Does
-this model selection method select models that seemings overfit? (6 points)
+Use the Evidence-based Bayesian model selection method from Lecture 11 to calculate the evidences for each of the above 8 models. Report the normalized
+evidences of each of the 8 models. Which model has the highese evidence? Does this model selection method select models that seemings overfit? (6 points)
 ```{r}
 num.models = 8
 logEvid = rep(-1, num.models)
@@ -464,12 +458,10 @@ for(mm in 1:num.models)
 ```{r}
 which.max(logEvid)
 ```
-7 is chosen, which is large!!! 
-
+7 is chosen, which is very large for polynomial regression, so there may be overfitting. A degree-7 polynomial is definitely unable to forcast well because common sense tells us that the search popularity for a keyword should not keep growing as fast as $x^7$ as time goes on.
 
 ## b and c
-Calculate the best model using the BIC and the AIC. Compare this model with the models
-obtaining high evidence from part (a).
+Calculate the best model using the BIC and the AIC. Compare these models with the models obtaining high evidence from part (a).
 
 ```{r}
 bic = rep(-9999, num.models)
@@ -490,11 +482,7 @@ for(mm in 1:num.models)
 which.min(bic)
 which.min(aic)
 ```
-Both are same as what evidence gave!!!
-
-```{r}
-plot(1:n, y, type='l')
-```
+Both BIC and AIC choose the same model as Bayesian Evidence does.
 
 \newpage
 # 5
@@ -565,10 +553,7 @@ The normalized evidence of the models with the highest evidence:
 ```{r}
 evid[ind[1]]
 ```
-Does this
-model selection method favor models that seemingly overfit?
-????????????????????????????
-?????????????????????????
+Again, this chosen model may be overfitting because k=4 means the model contains a degree-4 polynomial. The degree is still too high for the model to make reasonable predictions.
 
 ## b and c
 Calculate the best model using the BIC and AIC. Compare with the models
@@ -630,12 +615,19 @@ plot(1:n, y, type='l', xaxt='n')
 axis(side=1, at=(1:12)*12)
 ```
 
-```{r}
-2^19
-```
-```{r}
-# ready to run
 
+
+```{r}
+plot(1:n, log(y), type='l', xaxt='n')
+axis(side=1, at=(1:12)*12)
+```
+## a
+Use the Evidence-based Bayesian model selection method from Lecture 11 to
+calculate the evidences for each of the above $2^{19}$ models. Which models have high
+evidences? Do the frequencies k/n appearing in the high evidence models have
+any intuitive meaning? (8 points)
+
+```{r}
 fullX = matrix(1, nrow=n, ncol=38) # 38 = 2 + 18*2
 fullX[,2] = 1:n
 for (k in 1:18) {
@@ -647,16 +639,19 @@ all01 = expand.grid(replicate(18, 0:1, simplify = FALSE))
 logEvid.M = rep(-9999, nrow(all01)) # log evidences for the models in M_S
 logEvid.L = rep(-9999, nrow(all01)) # log evidences for the models in LM_S
 ```
-```{r}
+
+```{r, eval=FALSE}
+# takes 5-10 minutes
 inds.init = rep(F, 38) # initial indices
 inds.init[1] = T; inds.init[2] = T
-for(mm in 1:nrow(all01))
+for(mm in 1:100) # nrow(all01)
 {
   inds = inds.init
   if(mm >= 2) { # excluding the case when all01 is all FALSE
     where.true = (1:18)[as.logical(all01[mm,])]
     inds[2 + 2*where.true-1] = T
     inds[2 + 2*where.true] = T
+    # I later knew that using rep(each=2) is easier
   }
   
   Xmat = fullX[,inds]
@@ -665,36 +660,47 @@ for(mm in 1:nrow(all01))
   # the following log evidence formula for model mm comes from lecture 11 notes.
   logEvid.M[mm] = (lgamma(p/2)) - ((p/2)*(log((sum(md$fitted.values^2))))) + (lgamma((n-p-1)/2)) - (((n-p)/2)*(log((sum(md$residuals^2))/2)))
   
-  md = lm(log(y) ~ -1 + Xmat)
+  md = lm(I(log(y)) ~ -1 + Xmat)
   logEvid.L[mm] = (lgamma(p/2)) - ((p/2)*(log((sum(md$fitted.values^2))))) + (lgamma((n-p-1)/2)) - (((n-p)/2)*(log((sum(md$residuals^2))/2)))
 }
 ```
+
+```{r, eval=FALSE}
+save(logEvid.M, file='logEvid.M.RData')
+save(logEvid.L, file='logEvid.L.RData')
+```
 ```{r}
-as.logical(all01[1,])
-(1:18)[as.logical(all01[1,])]
+load('logEvid.M.RData')
+load('logEvid.L.RData')
 ```
 
-
-
+Calculate evidences from log evidences:
 ```{r}
-
-    
-    inds = all01[mm,]
-    Xmat = fullX[,(inds == 1)]
-    if(mm == 1) {
-      # this is the model with the intercept only, which is a trivial case
-      # if we don't run this if statement, weird bugs happen
-      Xmat = as.matrix(rep(1, nrow(dt)), nrow=nrow(dt), ncol=1)
-    }
-    p = ncol(Xmat)
-    n = nrow(Xmat)
-    md = lm(dt$Life.Exp ~ -1 + Xmat)
-    # the following log evidence formula for model mm comes from lecture 11 notes.
-    logEvid[mm] = (lgamma(p/2)) - ((p/2)*(log((sum(md$fitted.values^2))))) + (lgamma((n-p-1)/2)) - (((n-p)/2)*(log((sum(md$residuals^2))/2)))
+logEvid.max = max(logEvid.M, logEvid.L)
+evid.M = exp(logEvid.M - logEvid.max)
+evid.L = exp(logEvid.L - logEvid.max)
+normalizing.const = sum(evid.M) + sum(evid.L)
+evid.M = evid.M / normalizing.const
+evid.L = evid.L / normalizing.const
 ```
 
+It turns out that the log evidences of models in $LM_S$ are significantly higher than those of $M_S$ (see part b). So the high evidence models must be in $LM_S$, and so we only sort `evid.L` to get our top 10 models below:
+```{r}
+ind = sort(evid.L, decreasing = T, index.return=T)$ix[1:10]
+all01[ind,]
+```
+All of the top 10 models have frequency 12/n, which corresponds to period n/12=12 months. That makes sense because from the plot of the data, we can already see clear yearly seasonality. 
 
+## b
+For fixed S, which of the two models $M_S$ and $LM_S$ generally has higher evidence?
+(3 points)
 
+Models in $LM_S$ have higher evidence, as shown below:
+```{r}
+min(logEvid.L)
+max(logEvid.M)
+```
+This makes sense. Note that all the models considered here cannot fit data with varying oscillation amplitudes well; they are designed to fit data with constant oscillation amplitudes. The amplitude of the oscillations in the original data increases as time goes on, whereas in the logged data, the increase of amplitude is much less noticeable due to taking logarithm. 
 
 
 
