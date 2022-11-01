@@ -5,8 +5,7 @@ date: '2022-10-26'
 output: pdf_document
 ---
 ```{r}
-library(dplyr)
-library(ggplot2)
+library(tidyverse)
 set.seed(111)
 ```
 Reference: lecture code
@@ -317,14 +316,262 @@ ggplot(df) +
   geom_ribbon(aes(x=t, ymin=ylower, ymax=yupper), alpha=.2)
 ```
 
-The predictions make sense: because the largest root $\beta$ is very close to 1, the prediction graph is almost linear, and the slope looks similar to the slope of the data. 
+The predictions make sense: because the largest root $\beta$ is very close to 1, the prediction graph is almost linear, and the slope looks similar to the slope of the data. Also, the uncertainty interval is wider for predictions that are farther in the future.
 
 ## d
 Suppose that we want to predict the US population for the months preceding
 January 1959. Compare your fitted backward model with the forward model fitted earlier. Are there any
 similarities between the two models? (4 points)
+```{r}
+Xmat = matrix(1, nrow=n-2, ncol=3)
+Xmat[,2] = y[2:(n-1)]
+Xmat[,3] = y[3:n]
+modar.back = lm(y[1:(n-2)] ~ -1 + Xmat)
+summary(modar.back)
+```
+
+```{r}
+modar$coefficients
+```
+```{r}
+modar.back$coefficients
+```
+
+
+
+```{r}
+alph0 = modar.back$coefficients[1]
+alph1 = modar.back$coefficients[2]
+alph2 = modar.back$coefficients[3]
+
+-alph0/alph2
+-alph1/alph2
+1/alph2
+```
+WEIRD????????????????/
 
 ## e
 Using your model from the previous part, predict the US population for the 36
 months immediately preceding January 1959. Plot these predictions and uncertainty indicators along with the original data. Do these predictions make intuitive sense? (6 points).
+
+```{r}
+y.full = c(rep(-9999,36), y) # y prepended with the 36 backward predictions
+k = 36
+while(k>0) {
+  y.full[k] = sum(modar.back$coefficients * c(1, y.pred[k+1], y.pred[k+2]))
+  k = k-1
+}
+
+sighat = sqrt((sum((modar.back$residuals)^2))/(n-2*2-1)) #note: we use modar.back here
+Gamhat = matrix(sighat^2, 1, 1)
+vkp = matrix(modar.back$coefficients[2], 1, 1) #note: we use modar.back here
+for(i in 1:(36-1))
+{
+    covterm = Gamhat %*% vkp
+    varterm = (sighat^2) + (t(vkp) %*% (Gamhat %*% vkp))
+    Gamhat = cbind(Gamhat, covterm)
+    Gamhat = rbind(Gamhat, c(t(covterm), varterm))
+    
+    # update vkp
+    if (i < p) {vkp = c(modar.back$coefficients[(i+2)], vkp)}
+    if (i >= p) {vkp = c(0, vkp)}
+}
+predsd = sqrt(diag(Gamhat))
+predsd = rev(predsd) # reverse order because the prediction goes backwards
+predsd
+```
+
+In the plot below, predictions start on the left side of the red line (not including the red line):
+```{r}
+yupper = y.full + c(2*predsd, rep(0, n))
+ylower = y.full - c(2*predsd, rep(0, n))
+end = 100 # we only plot observations before this time
+df = data.frame(
+  t = (-35):end,
+  y = y.full[1:(36+end)],
+  yupper = yupper[1:(36+end)],
+  ylower = ylower[1:(36+end)]
+)
+
+ggplot(df) + 
+  geom_line(aes(x=t, y=y)) +
+  geom_vline(xintercept = 1, color='red') + 
+  geom_ribbon(aes(x=t, ymin=ylower, ymax=yupper), alpha=.2)
+```
+The predictions make sense: the prediction graph is almost linear, and the slope looks similar to the slope of the data. Also, the uncertainty interval is wider for predictions that are further away from the data.
+
+\newpage
+# 3
+```{r}
+y = pop$POPTHM
+n = length(y)
+```
+
+## a
+Fit the AR(3) model.
+```{r}
+ar3 = arima(y, order=c(3,0,0))
+ar3
+```
+The following are point estimates of phi1, phi2, phi3, and phi0 (following the order from left to right):
+```{r}
+ar3$coef
+```
+\newpage
+## b
+For better interpretability, I want to fit a model to the twice differenced series. Compare this twice-difference model to the AR(3) model fitted in the previous part. Are they similar?
+```{r}
+diff = rep(0, n) # twice difference of the time series
+for (i in 3:n) {
+  diff[i] = y[i] - 2*y[i-1] + y[i-2]
+}
+d = diff[3:n]
+ar.d = arima(d, order=c(1,0,0))
+ar.d
+```
+```{r}
+plot(3:n, d, type='l')
+
+```
+
+
+```{r}
+alpha0 = as.numeric(ar.d$coef['intercept'])
+alpha1 = as.numeric(ar.d$coef['ar1'])
+```
+
+The following four numbers are the coefficients obtained from rewriting the twice-diffrence model back in terms of $Y_t$:
+```{r}
+alpha0
+alpha1 + 2 # close to phi1
+-1-2*alpha1 # close to phi2
+alpha1 # close to phi3
+```
+Except that alpha0 is not close to phi0, the other coefficients are similar in both models. It makes sense that alpha0 is not close to phi0 because the twice-difference operation kills any linear trend in the time series. 
+
+## c
+Compare the predictions of the two models for the next 60 time points. Are the
+predictions similar? (4 points).
+```{r}
+ar3$coef
+```
+
+```{r}
+# discard this
+phi0 = ar3$coef['intercept'] %>% as.numeric()
+phi1 = ar3$coef[1] %>% as.numeric()
+phi2 = ar3$coef[2] %>% as.numeric()
+phi3 = ar3$coef[3] %>% as.numeric()
+```
+
+
+```{r}
+k = 60
+y.full = c(y, rep(-9999, k))
+for (t in (n+1):(n+k)) {
+  y.full[t] = sum(as.numeric(ar3$coef) * c(y.full[t-1], y.full[t-2], y.full[t-3], 1))
+}
+plot(1:(n+k), y.full)
+```
+```{r}
+linmod = lm(y ~ 1 + c(1:n))
+#r = linmod$residuals
+
+```
+
+prediction for diff:
+```{r}
+diff.full = c(diff, rep(-9999, k))
+for (t in (n+1):(n+k)) {
+  diff.full[t] = sum(as.numeric(ar.d$coef) * c(diff.full[t-1], 1))
+}
+plot(1:(n+k), diff.full, type='l')
+abline(v=n, col='red')
+```
+# 4
+Download the FRED dataset on “Retail Sales: Beer, Wine, and Liquor Stores” from
+https://fred.stlouisfed.org/series/MRTSSM4453USN. This is a monthly dataset
+(the units are millions of dollars) and is not seasonally adjusted. Separate the last 48
+observations from this dataset and keep them as a test dataset. Fit the AR(p) model
+for each p = 1, 2, . . . , 24 for the training dataset and use it to predict the observations
+in the test dataset. Evaluate the 24 models based on the accuracy of prediction and
+report the model with the best prediction accuracy. (10 points).
+```{r}
+alc = read.csv('alc.csv')
+colnames(alc)[2] = 'y'
+```
+```{r}
+n.test = 48
+n.train = nrow(alc) - n.test
+y.train = alc$y[1:n.train]
+y.test = alc$y[(n.train+1):nrow(alc)]
+```
+
+Let's choose p based on the mean square error of the predictions:
+```{r}
+mse = rep(-1, 24)
+for (p in 1:24) {
+  Xmat = matrix(1, n.train-p, p+1)
+  for(j in 1:p) {
+     Xmat[, (j+1)] = y.train[(p+1-j):(n.train-j)]
+  }
+  linmod = lm(y.train[(p+1):n.train] ~ -1 + Xmat)
+  
+  y.pred = c(y.train, rep(-9999, n.test))
+  for (t in (n.train+1):nrow(alc)) {
+    y.pred[t] = sum(c(1, y.pred[(t-1):(t-p)]) * linmod$coefficients)
+  }
+  
+  y.pred = y.pred[(n.train+1):nrow(alc)]
+  mse[p] = mean((y.pred - y.test)^2)
+}
+```
+
+The first plot reveals a significant drop of MSE when p=12. The second plot shows that p=15 attains the lowest MSE, so we will choose p=15.
+```{r}
+plot(1:24, mse, type='l')
+plot(12:24, mse[12:24], type='l')
+```
+
+Plot predictions vs. actual data to compare:
+```{r}
+p = 15
+Xmat = matrix(1, n.train-p, p+1)
+for(j in 1:p)
+{
+   Xmat[, (j+1)] = y.train[(p+1-j):(n.train-j)]
+}
+linmod = lm(y.train[(p+1):n.train] ~ -1 + Xmat)
+
+y.pred = c(y.train, rep(-9999, n.test))
+for (t in (n.train+1):nrow(alc)) {
+  y.pred[t] = sum(c(1, y.pred[(t-1):(t-p)]) * linmod$coefficients)
+}
+pred.time = (n.train+1):nrow(alc)
+y.pred = y.pred[pred.time]
+plot(pred.time, y.test, type='l') # actual data
+lines(pred.time, y.pred, col='red')
+```
+
+
+```{r, include=FALSE}
+#p = 12
+#ar = arima(y.train, order=c(p,0,0), method = 'ML') # why is this much slower than simply using linear regression? also, for large p, this gives errors.
+#y.pred = c(y.train, rep(-9999, n.test))
+#for (t in (n.train+1):nrow(alc)) {
+#  y.pred[t] = sum(c(y.pred[(t-1):(t-p)], 1) * ar$coef)
+#}
+#plot(1:nrow(alc), y.pred, type='l', col='red')
+#lines(1:nrow(alc), alc$y)
+```
+
+
+
+
+
+
+
+
+
+
 
