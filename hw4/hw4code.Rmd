@@ -408,38 +408,52 @@ n = length(y)
 ```
 
 ## a
-Fit the AR(3) model.
+Fit the AR(3) model to the data.
+
 ```{r}
-ar3 = arima(y, order=c(3,0,0))
-ar3
+# fits y to AR(p) model
+fit.ar = function(y, p) {
+  n = length(y)
+  Xmat = matrix(1, n-p, p+1)
+  for(j in 1:p)
+  {
+     Xmat[, (j+1)] = y[(p+1-j):(n-j)]
+  }
+  linmod = lm(y[(p+1):n] ~ -1 + Xmat)
+  return( linmod )
+}
+
+# I first used arima(y, order=c(3,0,0)), but it seems to give wrong coefficients?
 ```
-The following are point estimates of phi1, phi2, phi3, and phi0 (following the order from left to right):
+
+The following are point estimates of phi0, phi1, phi2, phi3:
 ```{r}
-ar3$coef
+modar = fit.ar(y, 3)
+modar$coefficients
 ```
+The following is a point estimate for sigma:
+```{r}
+sqrt((sum((modar$residuals)^2))/(n-3*2-1))
+```
+
+
 \newpage
 ## b
 For better interpretability, I want to fit a model to the twice differenced series. Compare this twice-difference model to the AR(3) model fitted in the previous part. Are they similar?
+
 ```{r}
 diff = rep(0, n) # twice difference of the time series
 for (i in 3:n) {
   diff[i] = y[i] - 2*y[i-1] + y[i-2]
 }
 d = diff[3:n]
-ar.d = arima(d, order=c(1,0,0))
-ar.d
+
+modar.d = fit.ar(d, 1)
+alpha0 = modar.d$coefficients[1] %>% as.numeric()
+alpha1 = modar.d$coefficients[2] %>% as.numeric()
+alpha0
+alpha1
 ```
-```{r}
-plot(3:n, d, type='l')
-
-```
-
-
-```{r}
-alpha0 = as.numeric(ar.d$coef['intercept'])
-alpha1 = as.numeric(ar.d$coef['ar1'])
-```
-
 The following four numbers are the coefficients obtained from rewriting the twice-diffrence model back in terms of $Y_t$:
 ```{r}
 alpha0
@@ -452,42 +466,53 @@ Except that alpha0 is not close to phi0, the other coefficients are similar in b
 ## c
 Compare the predictions of the two models for the next 60 time points. Are the
 predictions similar? (4 points).
-```{r}
-ar3$coef
-```
-
-```{r}
-# discard this
-phi0 = ar3$coef['intercept'] %>% as.numeric()
-phi1 = ar3$coef[1] %>% as.numeric()
-phi2 = ar3$coef[2] %>% as.numeric()
-phi3 = ar3$coef[3] %>% as.numeric()
-```
-
 
 ```{r}
 k = 60
+
+# compute AR(3) predictions
 y.full = c(y, rep(-9999, k))
 for (t in (n+1):(n+k)) {
-  y.full[t] = sum(as.numeric(ar3$coef) * c(y.full[t-1], y.full[t-2], y.full[t-3], 1))
+  phis = modar$coefficients %>% as.numeric()
+  #y.full[t] = sum(as.numeric(ar3$coef) * c(y.full[t-1], y.full[t-2], y.full[t-3], 1))
+  y.full[t] = sum(phis * c(1, y.full[t-1], y.full[t-2], y.full[t-3]))
 }
-plot(1:(n+k), y.full)
 ```
-```{r}
+
+
+```{r, include=F}
 linmod = lm(y ~ 1 + c(1:n))
-#r = linmod$residuals
-
+a = linmod$coefficients[2] # slope
+b = linmod$coefficients[1] # intercept
 ```
 
-prediction for diff:
+Below are predictions for the twice-difference $D_t$: 
 ```{r}
 diff.full = c(diff, rep(-9999, k))
 for (t in (n+1):(n+k)) {
-  diff.full[t] = sum(as.numeric(ar.d$coef) * c(diff.full[t-1], 1))
+  alphas = modar.d$coefficients %>% as.numeric()
+  diff.full[t] = sum(alphas * c(1, diff.full[t-1]))
 }
 plot(1:(n+k), diff.full, type='l')
 abline(v=n, col='red')
 ```
+Then, $Y_t$ can be recovered from $D_t$ as follows:
+```{r}
+y.d = c(y, rep(-9999, k)) # d stands for difference
+for (t in (n+1):(n+k)) {
+  y.d[t] = diff.full[t] + 2*y.d[t-1] - y.d[t-2]
+}
+```
+
+```{r}
+start = 650
+plotted.time = start:(n+k)
+pred.time = (n+1):(n+k)
+plot(plotted.time, y.full[plotted.time], type='l')
+lines(pred.time, y.d[pred.time], col='red')
+```
+Both predictions are quite linear and increasing. But the predictions given by the twice-difference model are smaller and have a smaller slope. This happens because all the future predictions by the twice-difference model are determined by the last two entries of the data `y` and the twice-difference model stores no information about the linear trend of the data. Hence, the future slope is largely  determined by the slope given by the last two entries of the data. To take the linear trend of the whole data into account, one should consider the residuals of `y` obtained from linear regression in the first place, then do the same process as above to get predictions for the residuals, and then add back the linear part of the linear regression.
+
 # 4
 Download the FRED dataset on “Retail Sales: Beer, Wine, and Liquor Stores” from
 https://fred.stlouisfed.org/series/MRTSSM4453USN. This is a monthly dataset
