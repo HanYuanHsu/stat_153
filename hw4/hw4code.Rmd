@@ -4,7 +4,7 @@ author: "Han-Yuan Hsu"
 date: '2022-10-26'
 output: pdf_document
 ---
-```{r}
+```{r, message=F}
 library(tidyverse)
 set.seed(111)
 ```
@@ -18,12 +18,6 @@ dataset.
 data("lynx")
 n = length(lynx) # 114
 ```
-
-```{r}
-plot(1:90, lynx[1:90], type='l')
-```
-
-
 
 ## a
 Fit the AR(2) model to the first 90 observations of this dataset. Report the
@@ -48,10 +42,9 @@ The point estimate for $\sigma$ is
 sighat = sqrt((sum((modar$residuals)^2))/85) # 85=90-2*2-1
 sighat
 ```
-Why is sighat so large. Possible reason: see the plot below. The AR(2) model does not expect lynx data to have big
-peaks every 40 years
+`sighat` is quite large. A possible reason can be seen in the plot in part (d). It reveals that the AR(2) model cannot fit the huge peaks present every 40 years in the data, and the model treats these huge peaks as variances of the data.
 
-Uncertainty quantification: \\
+Uncertainty quantification:\
 The posterior phi's follow a multivariate t distribution.
 ```{r}
 cov.mat = sighat^2 * solve(t(Xmat) %*% Xmat)
@@ -117,6 +110,8 @@ pred = function(t) {
 Use your AR(2) to predict the data from time points t = 91, . . . , 114. Also
 compute the standard deviations corresponding to the accuracy of prediction. (4
 points).
+
+In the plot below, predictions are on the right side of the red line.
 ```{r}
 y.pred = rep(-9999, n)
 y.pred[1:90] = lynx[1:90]
@@ -154,7 +149,7 @@ predsd
 Compare your predictions with the actual values from the dataset. Comment on
 the accuracy of the predictions. (2 points)
 
-In the plot below, the black graph is the actual lynx data, the red graphs are the predictions plus the 2-sd bands.
+In the plot below, the black graph is the actual lynx data, the red graphs are the predictions plus or minus 2 standard deviations.
 ```{r}
 plot(1:n, lynx, type='l', ylim=c(-2000, 7000))
 lines(91:n, y.pred[91:n], col='red')
@@ -163,8 +158,7 @@ predupper = y.pred[91:n] + 2*predsd
 lines(91:n, predlower, col='red')
 lines(91:n, predupper, col='red')
 ```
-Comment on
-the accuracy of the predictions.................................
+The predictions are not accurate; they quickly converge to one value, while the actual data continues to have seasonal oscillations. The model just treats those oscillations as errors and so the standard deviation is high. That is why the actual data is contained in the 2-sd band. 
 
 \newpage
 # 2
@@ -202,7 +196,7 @@ sighat = sqrt((sum((modar$residuals)^2))/(n-2*2-1))
 sighat
 ```
 
-Uncertainty quantification: \\
+Uncertainty quantification:\
 The posterior phi's follow a multivariate t distribution.
 ```{r}
 cov.mat = sighat^2 * solve(t(Xmat) %*% Xmat)
@@ -274,6 +268,7 @@ Calculate covariance matrix of prediction variables, Gamhat:
 ```{r}
 Gamhat = matrix(sighat^2, 1, 1) #this is the uncertainty for the first i.e., (n+1)^th prediction
 vkp = matrix(modar$coefficients[2], 1, 1) #this is the estimate for phi1
+p = 2
 for(i in 1:(36-1))
 {
     covterm = Gamhat %*% vkp
@@ -330,16 +325,17 @@ modar.back = lm(y[1:(n-2)] ~ -1 + Xmat)
 summary(modar.back)
 ```
 
+Compare the coefficients of the forward model with the coefficients of the backward model:
 ```{r}
 modar$coefficients
 ```
 ```{r}
 modar.back$coefficients
 ```
+We see that the intercepts have roughly the same magnitude but have opposite sign, while the other coefficients are quite similar. The reason why the intercepts have opposite sign might be because of going foward versus going backward.
 
 
-
-```{r}
+```{r, include=F}
 alph0 = modar.back$coefficients[1]
 alph1 = modar.back$coefficients[2]
 alph2 = modar.back$coefficients[3]
@@ -348,7 +344,7 @@ alph2 = modar.back$coefficients[3]
 -alph1/alph2
 1/alph2
 ```
-WEIRD????????????????/
+
 
 ## e
 Using your model from the previous part, predict the US population for the 36
@@ -358,7 +354,7 @@ months immediately preceding January 1959. Plot these predictions and uncertaint
 y.full = c(rep(-9999,36), y) # y prepended with the 36 backward predictions
 k = 36
 while(k>0) {
-  y.full[k] = sum(modar.back$coefficients * c(1, y.pred[k+1], y.pred[k+2]))
+  y.full[k] = sum(modar.back$coefficients * c(1, y.full[k+1], y.full[k+2]))
   k = k-1
 }
 
@@ -513,6 +509,7 @@ lines(pred.time, y.d[pred.time], col='red')
 ```
 Both predictions are quite linear and increasing. But the predictions given by the twice-difference model are smaller and have a smaller slope. This happens because all the future predictions by the twice-difference model are determined by the last two entries of the data `y` and the twice-difference model stores no information about the linear trend of the data. Hence, the future slope is largely  determined by the slope given by the last two entries of the data. To take the linear trend of the whole data into account, one should consider the residuals of `y` obtained from linear regression in the first place, then do the same process as above to get predictions for the residuals, and then add back the linear part of the linear regression.
 
+\newpage
 # 4
 Download the FRED dataset on “Retail Sales: Beer, Wine, and Liquor Stores” from
 https://fred.stlouisfed.org/series/MRTSSM4453USN. This is a monthly dataset
@@ -558,7 +555,7 @@ plot(1:24, mse, type='l')
 plot(12:24, mse[12:24], type='l')
 ```
 
-Plot predictions vs. actual data to compare:
+Plot predictions vs. actual data to compare, where predictions are colored red:
 ```{r}
 p = 15
 Xmat = matrix(1, n.train-p, p+1)

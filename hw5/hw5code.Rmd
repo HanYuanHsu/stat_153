@@ -1,0 +1,103 @@
+---
+title: "hw4code"
+author: "Han-Yuan Hsu"
+date: '2022-10-26'
+output: pdf_document
+---
+```{r, message=F}
+library(tidyverse)
+set.seed(111)
+```
+Reference: lecture code
+
+# 1
+Consider the dataset in 'norm.nao.monthly.b5001.current.ascii04Nov2022.txt' which
+gives (use the third column in the dataset) monthly data on the Northern Oscillation
+Index (this data has been taken from https://www.cpc.ncep.noaa.gov/products/
+precip/CWlink/pna/nao.shtml; see this page for more details about the data).
+```{r}
+dat = read.table('nao.txt')
+y = dat[,3]
+n = length(y)
+```
+```{r}
+plot(1:n, y, type="l")
+```
+
+
+## a
+I want to fit the MA(q) model to this dataset. Look at the sample autocorrelation
+function of the data and figure out an appropriate value of q. (2 points)
+```{r}
+acf(y)
+```
+Only the acf at lag 1 is significant (indicated by the blue dashed line). This suggests q=1.
+
+## b
+Fit the MA(q) (with your selected choice of q in the previous part) to the data.
+Use the conditional sum of squares method described in class (do not use any
+inbuild function in R for this part). Report point estimates and standard errors
+for the parameters. (5 points)
+
+Below, alphaest is the estimate of $\alpha=(\mu, \theta)$.
+```{r}
+q = 1
+#We can fit the MA(1) model directly (without using the custom function arima) as follows: 
+Sfunc = function(alpha) #alpha consists of mu and the theta parameters (theta is indexed from 1; theta_0 is always 1)
+{
+    mu = alpha[1]
+    thet = alpha[-1]
+    #q = length(thet)
+    zvals = c(rep(0, q), rep(9999, n))
+    for(t in 1:n)
+    {
+       zvals[q+t] = y[t] - mu - sum(thet * zvals[(q+t-1):t])
+    }
+    ans = sum(zvals^2)
+    return(ans)
+}
+alphaest = optim(rep(0, (q+1)), Sfunc)$par #We have chosen 0 as the initialization of both mu and theta
+```
+```{r}
+alphaest
+```
+Standard errors for $\mu, \theta$ respectively:
+```{r}
+#Standard Error Calculation
+#First compute Hessian
+library(numDeriv)
+H = hessian(Sfunc, alphaest)
+sighat = sqrt(Sfunc(alphaest)/(n-length(alphaest)))
+covmat = (sighat^2)*(solve(0.5*H)) # covariance matrix of the multivariate t distribution
+stderrs = sqrt(diag(covmat))
+stderrs
+```
+
+## c
+Compare your answers to that given by the arima function in R. (2 points)
+```{r}
+mamod = arima(y, order = c(0, 0, 1), method = "CSS")
+mamod
+```
+The results are almost the same.
+
+## d
+Use your fitted model to obtain point predictions for the next 24 months. Comment on whether the predictions appear reasonable. (2 points)
+```{r}
+pma = predict(mamod, n.ahead = 24)
+pma$pred
+```
+As expected, the predictions are the same after the second one. That is how the predictions of an MA(1) model works. 
+
+If the data follows an MA(1) model well, then the predictions beyond the second one should be close to $\mu$, which is close to the sample mean of the data. The sample mean is
+```{r}
+mean(y)
+```
+which is indeed close to $-0.001263719$.
+
+\newpage
+# 2
+
+
+
+
