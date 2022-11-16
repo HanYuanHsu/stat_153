@@ -97,7 +97,318 @@ which is indeed close to $-0.001263719$.
 
 \newpage
 # 2
+Download the FRED dataset on Long-Term Government Bond Yields: 10-year Main
+(including benchmark) for the United States".
+```{r}
+dat = read.csv('yield.csv')
+y = dat[,2]
+n = length(y)
+```
+```{r}
+plot(1:n, y, type='l')
+```
+
+## a
+Fit an AR(p) model to this datset with p = 4. Report parameter estimates and standard errors for the phi's. Use the model to obtain predictions for the next 100 months. Do the predictions look
+reasonable? (5 points)
+
+The parameter estimates and standard errors are given in the summary below (see the Estimate and Std. Error columns). 
+```{r}
+p = 4
+Xmat = matrix(nrow=n-p, ncol=p)
+for(j in 1:p)
+{
+   Xmat[,j] = y[(p-j+1):(n-j)]
+}
+modar = lm(y[(p+1):n] ~ Xmat)
+summary(modar)
+```
+
+Predictions:
+```{r}
+k = 100
+y.full = c(y, rep(-9999, k))
+phis = modar$coefficients %>% as.numeric()
+for (t in (n+1):(n+k)) {
+  y.full[t] = sum(phis * c(1, y.full[t-1], y.full[t-2], y.full[t-3], y.full[t-4]))
+}
+```
+```{r}
+plot(1:n, y, type='l', xlim=c(0,n+k))
+lines((n+1):(n+k), y.full[(n+1):(n+k)], col='red')
+```
+Do the predictions look
+reasonable????????????????????????????????????????????
+
+
+## b
+```{r}
+y.diff = diff(y) # length is n-1
+# note y.diff[t] is y[t+1] - y[t], not y[t] - y[t-1],
+# but when fitting MA model, such translation in time will not affect the results.
+plot(1:(n-1), y.diff, type='l', xlab='time (month)')
+acf(y.diff)
+```
+Again, only the acf at lag 1 is outside the blue band, i.e. significant. This suggests fitting MA(1) to `y.diff`.
+
+## c
+The point estimates and standard errors of the coefficients of the MA(1) model are given below:
+```{r}
+ma1 = arima(y.diff, order=c(0,0,1), method='CSS')
+ma1
+```
+Do I need uncertainty quantification for sigma??
+
+\newpage
+## d
+```{r}
+mu.hat = ma1$coef['intercept'] %>% as.numeric()
+theta.hat = ma1$coef['ma1'] %>% as.numeric()
+psi0 = mu.hat * (1-theta.hat+theta.hat^2-theta.hat^3)
+psi1 = theta.hat
+psi2 = -theta.hat^2
+psi3 = theta.hat^3
+c(psi0, psi1, psi2, psi3)
+```
+## e
+Compare the two rows of coefficients below:
+```{r}
+modar2.coef = c(psi0, 1+psi1, psi2-psi1, psi3-psi2, -psi3)
+modar2.coef
+modar$coefficients %>% as.numeric() # from the model in part a
+```
+Except the intercept, the coefficients are quite similar.
+
+## f
+Use the AR model from the previous part to obtain predictions for the next 100
+months. Compare these predictions with those obtained from part (a). Comment
+on the differences between these two predictions.
+```{r}
+k = 100
+y.full2 = c(y, rep(-9999, k))
+for (t in (n+1):(n+k)) {
+  y.full2[t] = sum(modar2.coef * c(1, y.full2[t-1], y.full2[t-2], y.full2[t-3], y.full2[t-4]))
+}
+```
+```{r}
+plot(1:n, y, type='l', xlim=c(0,n+k))
+lines((n+1):(n+k), y.full[(n+1):(n+k)], col='red')
+lines((n+1):(n+k), y.full2[(n+1):(n+k)], col='blue')
+```
+Slope is different...
+
+
+######################################################################
+
+```{r}
+my.model = arima(y, order=c(0,1,1), method='CSS')
+predict(my.model, n.ahead=20)$pred
+```
+```{r}
+plot(1:(n-2), diff(diff(y)), type='l')
+acf(diff(diff(diff(y))))
+```
+###################################################
+
+\newpage
+# 3
+Download the FRED dataset on Retail Sales: Beer, Wine, and Liquor Stores" from
+https://fred.stlouisfed.org/series/MRTSSM4453USN. This is a monthly dataset
+(the units are millions of dollars) and is not seasonally adjusted.
+```{r}
+dat = read.csv('alc.csv')
+y = dat[,2]
+n = length(y)
+```
+
+```{r}
+plot(1:n, y, type='l')
+```
+## a
+The parameter estimates and standard errors are given in the summary below (see the Estimate and Std. Error columns). 
+```{r}
+p = 16
+Xmat = matrix(nrow=n-p, ncol=p)
+for(j in 1:p)
+{
+   Xmat[,j] = y[(p-j+1):(n-j)]
+}
+modar = lm(y[(p+1):n] ~ Xmat)
+summary(modar)
+```
+
+Predictions are shown red:
+```{r}
+k = 36
+y.full = c(y, rep(-9999, k))
+phis = modar$coefficients %>% as.numeric()
+for (t in (n+1):(n+k)) {
+  y.full[t] = sum(phis * c(1, y.full[(t-1):(t-p)]))
+}
+```
+```{r}
+start=250
+plot(start:n, y[start:n], type='l', xlim=c(start-1,n+k), ylim=c(3000, 8500))
+lines((n+1):(n+k), y.full[(n+1):(n+k)], col='red')
+```
+The predictions look very reasonable. They capture the shape of the periodic patterns.
+
+## b
+Would any Moving Average model work directly on this dataset? Answer this
+question by trying out MA(q) for a range of values of q. You can evaluate models
+by looking at their future predictions. Use the R function arima to fit models and
+the function predict to obtain future predictions.
+
+We will evaluate models by splitting the time series into training and testing data:
+```{r}
+ntrain=300
+ntest=n-ntrain
+ytrain = y[1:ntrain]
+ytest = y[(ntrain+1):n]
+```
+
+Let's see how well MA(20) can predict this dataset:
+```{r}
+q=20
+ma = arima(ytrain, order=c(0,0,q), method='CSS')
+ma.pred = predict(ma, n.ahead=ntest)$pred
+
+plot(1:n, y, type='l')
+lines((ntrain+1):n, ma.pred, col='red')
+```
+It is really bad, but it makes sense because MA predictions will eventually just report the mean of the training data, but the mean of the training data is meaningless because the data has has an increasing trend. Therefore, I can already anticipate that for all q, MA(q) models will eventually give bad predictions.
+
+I use linear regression model as the benchmark. Then we can compare MA(q) models for q=1~20 with this benchmark.
+```{r}
+linmod = lm(ytrain ~ c(1:ntrain))
+lin.coeff = linmod$coefficients %>% as.numeric()
+lin.pred = lin.coeff[1] + lin.coeff[2]*c((ntrain+1):n)
+lin.mse = mean((ytest - lin.pred)^2) # mean square error
+lin.mse
+#plot(1:n, y, type='l')
+#lines((ntrain+1):n, lin.pred, col='red')
+```
+```{r, warning=FALSE}
+ma.mse = rep(-1, 20)
+for (q in 1:20) {
+  ma = arima(ytrain, order=c(0,0,q), method='CSS')
+  ma.pred = predict(ma, n.ahead=ntest)$pred
+  ma.mse[q] = mean((ytest - ma.pred)^2)
+}
+ma.mse
+```
+We see that the mean square test errors of all MA(q) models are greater than the benchmark error `lin.mse`.
+
+## c
+Let Yt denote the original dataset. Construct a new dataset Dt by `diff(diff(Yt, lag= 12))`. Plot the dataset Dt with time on the x-axis. Also plot the sample autocorrelation function of Dt. Would the MA(1) model be reasonable for Dt?
+
+```{r}
+Dt = diff(diff(y, lag= 12))
+#length(Dt) # n-13
+plot(1:length(Dt), Dt, type='l')
+acf(Dt)
+```
+We see that the acf of Dt at lag 1 is significantly outside the blue band. Thus, MA(1) is a reasonable model for Dt, even though a few other acfs at other lags are also outside the blue band. 
+
+## d
+The point estimates and standard errors are shown below:
+```{r}
+ma1 = arima(Dt, order=c(0,0,1), method='CSS')
+ma1
+mu = ma1$coef[2] %>% as.numeric(); th = ma1$coef[1] %>% as.numeric()
+```
+
+\newpage
+## e
+```{r}
+psi0 = mu * (1-th+th^2-th^3)
+psi1 = th
+psi2 = -th^2
+psi3 = th^3
+c(psi0, psi1, psi2, psi3)
+```
+```{r}
+mu
+mean(Dt)
+```
 
 
 
+## f
+```{r}
+d.coef = rep(0, p+1) # coefficients for the second AR(16) model derived from Dt. The first entry is the intercept.
+d.coef[1] = psi0
+d.coef[2] = 1+psi1
+d.coef[3] = psi2-psi1
+d.coef[4] = psi3-psi2
+d.coef[5] = -psi3
+d.coef[13] = 1
+d.coef[14] = 1-psi1
+d.coef[15] = psi1-psi2
+d.coef[16] = psi2-psi3
+d.coef[17] = psi3
 
+```
+```{r}
+d.coef
+modar$coefficients
+```
+
+## g
+Use the AR model from the previous part to obtain predictions for the next 36
+months. Compare these predictions with those obtained from part (a). Comment
+on the differences between these two predictions.
+```{r}
+k = 36
+y.full2 = c(y, rep(-9999, k))
+for (t in (n+1):(n+k)) {
+  y.full2[t] = sum(d.coef * c(1, y.full2[(t-1):(t-p)]))
+}
+```
+```{r}
+# explodes... strange...
+y.full2[(n+1):(n+k)]
+```
+
+
+```{r}
+plot(1:n, y, type='l', xlim=c(0,n+k))
+#lines((n+1):(n+k), y.full[(n+1):(n+k)], col='red')
+lines((n+1):(n+k), y.full2[(n+1):(n+k)], col='blue')
+```
+\newpage
+# 4
+Consider the sunspots data that we looked at in class.
+
+Column 1 is the year (2020.5 refers to the year 2020 for example); Column 2 is the yearly mean total sunspot number (this is obtained by taking a simple arithmetic mean of the daily total sunspot number over all days of the each year). Column 3 is the yearly mean standard deviation of the sunspot numbers from individual stations and Column 4 is the number of observations used to compute the yearly mean total sunspot number (-1 indicates missing value)
+
+```{r}
+dat = read.delim("sunspot.txt", header = F, sep = "")
+y = dat[,2]
+n = length(y)
+```
+```{r}
+plot(1:n, y, type='l')
+```
+
+
+## a
+Plot the sample acf and pacf for this dataset. Based on these plots, argue that
+AR(9) is an appropriate model for this dataset.
+```{r}
+acf(y)
+pacf(y)
+```
+For a time series following AR(p), its pacf at lag p+1 and beyond will be 0. The pacf of the sunspot data at lag 10 and beyond are almost within the blue band, meaning that they are not significant. This suggests the possibility that the sunspot time series follows AR(9).
+
+
+## b
+Split this dataset by removing the last 40 datapoints and keeping them aside as a
+test dataset. The remaining observations will form the training dataset. Fit the
+AR(p) model for p = 1~15 as well as the MA(q) model for q = 1~15 to
+the training dataset. You can use inbuilt R functions for ftting these models. Obtain
+predictions for each of these models for the future 40 datapoints and compare
+them to the actual observations in the test dataset. Which model performs best
+in terms of mean squared error of prediction? Compare the performance of the
+best model with the AR(9) model (if they are different) obtained in the previous
+part.
