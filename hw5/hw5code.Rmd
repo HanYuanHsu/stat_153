@@ -1,7 +1,7 @@
 ---
-title: "hw4code"
+title: "hw5code"
 author: "Han-Yuan Hsu"
-date: '2022-10-26'
+date: '2022-11-18'
 output: pdf_document
 ---
 ```{r, message=F}
@@ -39,11 +39,11 @@ Use the conditional sum of squares method described in class (do not use any
 inbuild function in R for this part). Report point estimates and standard errors
 for the parameters. (5 points)
 
-Below, alphaest is the estimate of $\alpha=(\mu, \theta)$.
+Below, alphaest is the estimate of $\alpha=(\mu, \theta_1)$.
 ```{r}
 q = 1
 #We can fit the MA(1) model directly (without using the custom function arima) as follows: 
-Sfunc = function(alpha) #alpha consists of mu and the theta parameters (theta is indexed from 1; theta_0 is always 1)
+Sfunc = function(alpha)
 {
     mu = alpha[1]
     thet = alpha[-1]
@@ -61,7 +61,7 @@ alphaest = optim(rep(0, (q+1)), Sfunc)$par #We have chosen 0 as the initializati
 ```{r}
 alphaest
 ```
-Standard errors for $\mu, \theta$ respectively:
+Standard errors for $\mu, \theta_1$ respectively:
 ```{r}
 #Standard Error Calculation
 #First compute Hessian
@@ -93,7 +93,7 @@ If the data follows an MA(1) model well, then the predictions beyond the second 
 ```{r}
 mean(y)
 ```
-which is indeed close to $-0.001263719$.
+which is indeed close to $-0.001263719$. Since the data oscillates a lot, it is reasonable that the model only reports the mean. 
 
 \newpage
 # 2
@@ -137,8 +137,22 @@ for (t in (n+1):(n+k)) {
 plot(1:n, y, type='l', xlim=c(0,n+k))
 lines((n+1):(n+k), y.full[(n+1):(n+k)], col='red')
 ```
-Do the predictions look
-reasonable????????????????????????????????????????????
+It looks like the predictions of the model are simply going to converge exponentially to roughly the mean of the data. Indeed, below calculates the prediction 1000 months into the future, and we see that it is close to the mean of the data:
+```{r}
+K=1000
+y.full = c(y, rep(-9999, K))
+phis = modar$coefficients %>% as.numeric()
+for (t in (n+1):(n+K)) {
+  y.full[t] = sum(phis * c(1, y.full[t-1], y.full[t-2], y.full[t-3], y.full[t-4]))
+}
+```
+
+```{r}
+mean(y)
+y.full[n+K]
+```
+The model does not capture the increasing and then decreasing long-term trend revealed in the data, which is bad, but at least it predicts the mean, which is a reasonable part. 
+
 
 
 ## b
@@ -152,12 +166,11 @@ acf(y.diff)
 Again, only the acf at lag 1 is outside the blue band, i.e. significant. This suggests fitting MA(1) to `y.diff`.
 
 ## c
-The point estimates and standard errors of the coefficients of the MA(1) model are given below:
+The point estimates and standard errors (see the s.e. row) of the coefficients of the MA(1) model are given below:
 ```{r}
 ma1 = arima(y.diff, order=c(0,0,1), method='CSS')
 ma1
 ```
-Do I need uncertainty quantification for sigma??
 
 \newpage
 ## d
@@ -183,6 +196,8 @@ Except the intercept, the coefficients are quite similar.
 Use the AR model from the previous part to obtain predictions for the next 100
 months. Compare these predictions with those obtained from part (a). Comment
 on the differences between these two predictions.
+
+The following cell calculates the predictions given by the second model:
 ```{r}
 k = 100
 y.full2 = c(y, rep(-9999, k))
@@ -190,25 +205,18 @@ for (t in (n+1):(n+k)) {
   y.full2[t] = sum(modar2.coef * c(1, y.full2[t-1], y.full2[t-2], y.full2[t-3], y.full2[t-4]))
 }
 ```
+
+Below, the predictions of the first model are in red, while the predictions of the second model are in blue.
 ```{r}
 plot(1:n, y, type='l', xlim=c(0,n+k))
 lines((n+1):(n+k), y.full[(n+1):(n+k)], col='red')
 lines((n+1):(n+k), y.full2[(n+1):(n+k)], col='blue')
 ```
-Slope is different...
-
-
-######################################################################
-
+Their slopes are different, which makes sense because the intercepts of the two models are different.
 ```{r}
-my.model = arima(y, order=c(0,1,1), method='CSS')
-predict(my.model, n.ahead=20)$pred
+#model.diff = y.full[(n+1):(n+k)] - y.full2[(n+1):(n+k)]
+#plot(1:k, model.diff, type='l')
 ```
-```{r}
-plot(1:(n-2), diff(diff(y)), type='l')
-acf(diff(diff(diff(y))))
-```
-###################################################
 
 \newpage
 # 3
@@ -224,7 +232,9 @@ n = length(y)
 ```{r}
 plot(1:n, y, type='l')
 ```
+
 ## a
+
 The parameter estimates and standard errors are given in the summary below (see the Estimate and Std. Error columns). 
 ```{r}
 p = 16
@@ -237,7 +247,7 @@ modar = lm(y[(p+1):n] ~ Xmat)
 summary(modar)
 ```
 
-Predictions are shown red:
+Predictions are shown in red:
 ```{r}
 k = 36
 y.full = c(y, rep(-9999, k))
@@ -327,12 +337,6 @@ psi2 = -th^2
 psi3 = th^3
 c(psi0, psi1, psi2, psi3)
 ```
-```{r}
-mu
-mean(Dt)
-```
-
-
 
 ## f
 ```{r}
@@ -343,15 +347,19 @@ d.coef[3] = psi2-psi1
 d.coef[4] = psi3-psi2
 d.coef[5] = -psi3
 d.coef[13] = 1
-d.coef[14] = 1-psi1
+d.coef[14] = -1-psi1
 d.coef[15] = psi1-psi2
 d.coef[16] = psi2-psi3
 d.coef[17] = psi3
 
 ```
+
+Below, the first column is the coefficients of the first model, and the second column is the coefficients of the second model. We see that $\phi_4$ through $\phi_12$ (see rows 5 through 13) in both models are similar, even though the remaining phi's are not. 
 ```{r}
-d.coef
-modar$coefficients
+compare.matrix = matrix(-9999, nrow=p+1, ncol=2)
+compare.matrix[,1] = modar$coefficients %>% as.numeric()
+compare.matrix[,2] = d.coef
+compare.matrix
 ```
 
 ## g
@@ -366,20 +374,21 @@ for (t in (n+1):(n+k)) {
 }
 ```
 ```{r}
-# explodes... strange...
 y.full2[(n+1):(n+k)]
 ```
 
-
+The two models actually give similar predictions, as shown below. The predictions of the first model are in red, while the predictions of the second model are in blue.
 ```{r}
 plot(1:n, y, type='l', xlim=c(0,n+k))
-#lines((n+1):(n+k), y.full[(n+1):(n+k)], col='red')
+lines((n+1):(n+k), y.full[(n+1):(n+k)], col='red')
 lines((n+1):(n+k), y.full2[(n+1):(n+k)], col='blue')
 ```
+
 \newpage
 # 4
 Consider the sunspots data that we looked at in class.
 
+About the data:
 Column 1 is the year (2020.5 refers to the year 2020 for example); Column 2 is the yearly mean total sunspot number (this is obtained by taking a simple arithmetic mean of the daily total sunspot number over all days of the each year). Column 3 is the yearly mean standard deviation of the sunspot numbers from individual stations and Column 4 is the number of observations used to compute the yearly mean total sunspot number (-1 indicates missing value)
 
 ```{r}
@@ -412,3 +421,66 @@ them to the actual observations in the test dataset. Which model performs best
 in terms of mean squared error of prediction? Compare the performance of the
 best model with the AR(9) model (if they are different) obtained in the previous
 part.
+```{r}
+ntest=40
+ntrain=n-ntest
+ytrain = y[1:(n-ntest)]
+ytest = y[(n-ntest+1):n]
+ar.pred = matrix(-9999, nrow=ntest, ncol=15) # column p is predictions of AR(p) model
+ar.mse = rep(-1, 15)
+ma.pred = matrix(-9999, nrow=ntest, ncol=15) # column p is predictions of MA(p) model
+ma.mse = rep(-1, 15)
+
+# AR
+for (p in 1:15) {
+  Xmat = matrix(nrow=ntrain-p, ncol=p)
+  for(j in 1:p)
+  {
+     Xmat[,j] = ytrain[(p-j+1):(ntrain-j)]
+  }
+  modar = lm(ytrain[(p+1):ntrain] ~ Xmat)
+  
+  # make predictions
+  y.full = c(y, rep(-9999, ntest))
+  phis = modar$coefficients %>% as.numeric()
+  for (t in (ntrain+1):n) {
+    y.full[t] = sum(phis * c(1, y.full[(t-1):(t-p)]))
+  }
+  ar.pred[,p] = y.full[(ntrain+1):n]
+  
+  # calculate mse
+  ar.mse[p] = mean((ytest - ar.pred[,p])^2)
+}
+
+# MA
+for (p in 1:15) {
+  ma = arima(ytrain, order=c(0,0,p), method='CSS')
+  ma.pred[,p] = predict(ma, n.ahead = ntest)$pred %>% as.numeric()
+  # calculate mse
+  ma.mse[p] = mean((ytest - ma.pred[,p])^2)
+}
+
+```
+```{r}
+ar.mse
+ma.mse
+```
+The following shows that AR(15) is the best model in terms of prediction MSE:
+```{r}
+best.p = which.min(ar.mse)
+best.q = which.min(ma.mse)
+ar.mse[best.p] # smaller
+ma.mse[best.q]
+best.p
+```
+
+Comparing prediction MSEs of AR(15) and AR(9), we see that AR(9) is only slightly worse than AR(15):
+```{r}
+ar.mse[15]
+ar.mse[9]
+```
+From the plot below, we see that the MSE of AR(p) for p after 9 is not much different and even grows a bit. Hence, if we prefer models with fewer parameters, then we could have chosen AR(9) based on this plot.
+```{r}
+plot(1:15, ar.mse, xlab='p', ylab='MSE of AR(p)')
+```
+

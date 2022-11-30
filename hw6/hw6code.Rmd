@@ -1,0 +1,378 @@
+---
+title: "hw6code"
+author: "Han-Yuan Hsu"
+date: '2022-11-28'
+output: pdf_document
+---
+```{r, message=F}
+library(tidyverse)
+set.seed(111)
+```
+Reference: lecture code
+
+# 1
+```{r}
+dat = read.csv('aquarium.csv', header=T, skip=1)
+y = dat[,2]
+n = length(y)
+ntest = 36
+ntrain = n-ntest
+ytrain = y[1:ntrain]
+ytest = y[(ntrain+1):n]
+```
+
+Below is the plot of the training data:
+```{r}
+plot(ytrain, type='l')
+```
+
+There is a decreasing trend until sometime around 130 and then there seems to be a slight increasing trend. Hence I decided to model the long-term trend by a quadratic, which can be done by the lm function. I will remove the quadratic trend by taking the residual r:
+```{r}
+tme = c(1:ntrain)
+linmod = lm(ytrain ~ tme + I(tme^2))
+summary(linmod)
+r = linmod$residuals %>% as.numeric()
+```
+
+Below is the plot of the residual r. By inspection, there is a seasonal trend with period 12, so let's do seasonal differencing to r.
+```{r}
+plot(r, type='l')
+```
+I call the differenced residual rd. The pacf of rd below shows a significant spike at lag 1, which suggests the use of AR(1) model to fit rd. There are also significant spikes at lag 10 and 13, but if we want a simple model, then AR(1) should be good. 
+```{r}
+rd = diff(r, lag=12)
+n.rd = length(rd)
+plot(rd, type='l')
+acf(rd)
+pacf(rd)
+```
+
+To summarize, we will fit the following AR(1) model with seasonal differencing to the residual r. The 1 in the seasonal attribute of the arima function stands for doing seasonal differencing once.
+```{r}
+r.mod = arima(r, order=c(1, 0, 0), seasonal=list(order=c(0,1,0), period=12))
+r.mod
+```
+
+Below, the red part is the prediction given by our model, and the black part is the whole time series data set, including the test set. Except the part around time=200, the prediction fits the test data quite well. I suspect that the part around time=200 is when Covid broke out in the US, which caused the time series in that period to deviate from the usual pattern it is following.
+```{r}
+r.pred = predict(r.mod, n.ahead=ntest)$pred
+lin.coef = linmod$coefficients %>% as.numeric()
+lin.pred = lin.coef[1] + lin.coef[2]*c((ntrain+1):n) + lin.coef[3]*c((ntrain+1):n)^2
+pred = r.pred + lin.pred
+plot(1:n, y, type='l')
+lines((ntrain+1):n, pred, col='red')
+#plot(c(r, r.pred), type = "l")
+#abline(v=length(r), col='red')
+```
+```{r}
+pred.error = ytest - as.numeric(pred)
+pred.error
+```
+We see that the prediction errors are the largest from the 4th prediction to the 9^th prediction. If we check the months they correspond to, we get:
+```{r}
+dat[(ntrain+4):(ntrain+9), 1]
+```
+which supports my hypothesis because March 2020 was exactly when places began to shut down due to Covid outbreak.
+
+The mean-square error of the predictions is
+```{r}
+mean(pred.error^2)
+```
+
+# 2
+```{r}
+dat = read.csv('beer.csv', header=T, skip=1)
+y = dat[,2]
+n = length(y)
+ntest = 36
+ntrain = n-ntest
+ytrain = y[1:ntrain]
+ytest = y[(ntrain+1):n]
+```
+
+Below is the plot of the training data:
+```{r}
+plot(ytrain, type='l')
+```
+
+There is an increasing trend, so we can first fit a linear model:
+```{r}
+tme = c(1:ntrain)
+linmod = lm(ytrain ~ tme)
+summary(linmod)
+r = linmod$residuals %>% as.numeric()
+```
+
+Below are the plot of the residual r and its acf. The acf at lag 12 is significant, suggesting that there is yearly seasonal trend in the data. Hence, we will do differencing with period=12.
+```{r}
+plot(r, type='l')
+acf(r)
+```
+
+```{r}
+rd = diff(r, lag=12)
+plot(rd, type='l')
+acf(rd)
+```
+The acf of rd at first decreases in a manner like AR(1), but the acf at lag 12 becomes negative and is significant. This makes me think of the following model:
+$$(I-bB^{12})(I-aB)(\text{rd}) = Z_t$$
+
+Below, I plot the theoretical acf of this model to see if it looks similar to the data's acf above. It looks somewhat similar for suitable a and b, hence we will use this model to fit rd.
+```{r}
+L = 25
+a = 0.58
+b = -0.2
+phis = rep(0, 13)
+phis[1] = a
+phis[12] = b
+phis[13] = -a*b
+corrs = ARMAacf(ar = phis, lag.max = L)
+plot(x = 0:L, y = corrs, type = "h",  xlab = "Lag k", ylab = "acf") 
+abline(h = 0)
+#pcorrs = ARMAacf(ar = phis, lag.max = L, pacf=T)
+#plot(x = 1:L, y = pcorrs, type = "h",  xlab = "Lag k", ylab = "pacf") 
+#abline(h = 0)
+```
+
+In other words, we fit the following model to r:
+```{r}
+r.mod = arima(r, order=c(1, 0, 0), seasonal=list(order=c(1,1,0), period=12))
+r.mod
+```
+
+Predictions for the residual r are shown after the red line:
+```{r}
+r.pred = predict(r.mod, n.ahead=ntest)$pred
+plot(c(r, r.pred), type = "l")
+abline(v=length(r), col='red')
+```
+
+Predictions for the original time series are shown in red:
+```{r}
+lin.coef = linmod$coefficients %>% as.numeric()
+lin.pred = lin.coef[1] + lin.coef[2]*c((ntrain+1):n)
+pred = r.pred + lin.pred
+plot(1:n, y, type='l')
+lines((ntrain+1):n, pred, col='red')
+```
+
+The predictions are higher than the actual test data. The trend in the test data is actually decreasing, and now I see that the tail of the training data does give a hint to such a decrease. Maybe using a quadratic to model the long-term trend is better, but I didn't do that in the beginning because it wouldn't make sense for this particular time series to become negative and decrease quadratically to negative infinity far in the future. 
+
+Here is the MSE of the predictions:
+```{r}
+mean((pred-ytest)^2)
+```
+
+
+
+```{r}
+# average smoothing
+ave.filter = c(1/24, rep(1/12, 11), 1/24)
+ave.filter
+trend = stats::filter(ytrain, filter=ave.filter)
+plot(trend, type='l')
+```
+
+
+# 3
+```{r}
+dat = read.csv('algebra.csv', header=T, skip=1)
+y = dat[,2]
+n = length(y)
+ntrain = n-ntest
+ytrain = y[1:ntrain]
+ytest = y[(ntrain+1):n]
+```
+
+Below is the plot of the training data:
+```{r}
+plot(ytrain, type='l')
+```
+
+I suspect the long-term trend in this time series is sinusoidal. We can reveal the long-term trend by doing average smoothing as follows:
+```{r}
+ave.filter = c(1/24, rep(1/12, 11), 1/24)
+trend = stats::filter(ytrain, filter=ave.filter)
+plot(trend, type='l')
+```
+So yes, a sinusoid will be a good fit to the long-term trend. The sinusoid model we will first fit is below:
+$$y_t = \beta_0 + \beta_1\cos(\omega t) + \beta_2\sin(\omega t)$$
+where the betas and omega are unknown. From HW2, we know the posterior distribution of omega given the training data:
+```{r}
+log.post.omega <- function(omega) { # log of posterior distribution
+  X = matrix(1, nrow=ntrain, ncol=3)
+  X[,2] = cos(omega*(1:ntrain))
+  X[,3] = sin(omega*(1:ntrain))
+  mod = lm(ytrain ~ -1 + X)
+  log.post = (ncol(X) - n)/2*log(sum(mod$residuals^2)) - 0.5*log(det(t(X) %*% X))
+  log.post
+}
+```
+
+Hence, the maximizer of this log posterior distribution is a good estimator for omega. 
+```{r}
+omega.hat = optimize(log.post.omega, interval=c(2*pi/190, 2*pi/170), maximum=T)$maximum
+```
+
+The period corresponding to omega.hat is
+```{r}
+2*pi/omega.hat
+```
+which is reasonable if one sees the plot of the training data above.
+
+
+Then we can get the betas:
+```{r}
+X = matrix(1, nrow=ntrain, ncol=3)
+X[,2] = cos(omega.hat*(1:ntrain))
+X[,3] = sin(omega.hat*(1:ntrain))
+linmod = lm(ytrain ~ -1 + X)
+linmod$coefficients
+```
+Let's now plot the residual r and its acf. Lag 12 is very siginificant, indicating that we can do yearly differencing to r.
+```{r}
+r = linmod$residuals
+plot(r, type='l')
+acf(r) # spike at 12 -> yearly trend
+```
+Let's take a look at the acf and pacf of the differenced residual, rd, below:
+```{r}
+rd = diff(r, lag=12)
+acf(rd)
+pacf(rd)
+```
+The ACF at lag 1, 2, 3, and 12 are significant, and the PACF at lag 1, 3, 12, 13 are significant. Now it is a bit hard to decide which SARIMA model to fit, so we will just try out all $\text{ARIMA}(p, 0, q) \times (P, 1, Q)_{12}$ with p=0:3, q=0:3, P=0:1, Q=0:1, and pick the model with the smallest test MSE. 
+```{r}
+my.model = function(p,q,P,Q) {
+  r.mod = arima(r, order=c(p, 0, q), seasonal=list(order=c(P,1,Q), period=12))
+  r.pred = predict(r.mod, n.ahead=ntest)$pred %>% as.numeric()
+  trend.coef = linmod$coefficients %>% as.numeric()
+  pred.time = (ntrain+1):n
+  trend.pred = trend.coef[1] + trend.coef[2]*cos(pred.time) + trend.coef[3]*sin(pred.time)
+  pred = r.pred + trend.pred
+  mse = mean((ytest - pred)^2)
+  return( list(pred=pred, mse=mse, r.pred=r.pred) )
+}
+```
+```{r}
+best.param = rep(-1, 4)
+best.mse = 9999
+for (p in 0:3) {
+  for (q in 0:3) {
+    for (P in 0:1) {
+      for (Q in 0:1) {
+        mod = my.model(p,q,P,Q)
+        if (mod$mse < best.mse) {
+          best.mse = mod$mse
+          best.param = c(p,q,P,Q)
+        }
+      }
+    }
+  }
+}
+
+```
+It turns out the following set of parameters is chosen:
+```{r}
+best.param
+```
+This best model's MSE is
+```{r}
+best.mse
+```
+Let's plot the predictions given by this model, which are in red. Black is the actual data.
+```{r}
+plot(1:n, y, type='l')
+lines((ntrain+1):n, best.mod$pred, col='red')
+```
+
+
+
+
+
+##############################################
+
+
+```{r}
+mod.a = my.model(3, 0, 1, 0) # best
+mod.b = my.model(3, 0, 2, 0)
+mod.c = my.model(3, 0, 0, 1)
+mod.d = my.model(0, 3, 1, 0)
+mod.e = my.model(0, 3, 2, 0)
+mod.f = my.model(3, 3, 1, 0)
+mod.g = my.model(1, 0, 1, 0)
+mod.a$mse
+mod.b$mse
+mod.c$mse
+mod.d$mse
+mod.e$mse
+mod.f$mse
+mod.g$mse
+```
+
+
+```{r}
+L = 25
+phis = rep(0, 13)
+phis[1] = 0.32
+phis[12] = -0.3
+phis[13] = 0.25
+#corrs = ARMAacf(ar = phis, lag.max = L)
+#plot(x = 0:L, y = corrs, type = "h",  xlab = "Lag k", ylab = "acf") 
+#abline(h = 0)
+pcorrs = ARMAacf(ar = phis, lag.max = L, pacf=T)
+plot(x = 1:L, y = pcorrs, type = "h",  xlab = "Lag k", ylab = "pacf") 
+abline(h = 0)
+```
+
+```{r}
+corrs = ARMAacf(ar = c(0.35), ma=c(rep(0,11), -0.2), lag.max = L)
+plot(x = 0:L, y = corrs, type = "h",  xlab = "Lag k", ylab = "acf") 
+abline(h = 0)
+pcorrs = ARMAacf(ar = c(0.35), ma=c(rep(0,11), -0.2), lag.max = L, pacf=T)
+plot(x = 1:L, y = pcorrs, type = "h",  xlab = "Lag k", ylab = "pacf") 
+abline(h = 0)
+```
+
+
+```{r}
+plot(1:ntrain, log(ytrain), type='l')
+```
+```{r}
+linmod = lm(log(y)~c(1:n))
+r = linmod$residuals %>% as.numeric()
+```
+```{r}
+plot(1:n, r, type='l')
+```
+```{r}
+rd = diff(r, lag=12)
+n.rd = length(rd)
+plot(1:n.rd, rd, type='l')
+```
+```{r}
+acf(rd)
+pacf(rd)
+```
+```{r}
+plot(1:180, rd[1:180], type='l')
+acf(rd[1:180])
+pacf(rd[1:180])
+```
+
+from the pacf, maybe try AR1 or seasonal AR1?
+
+Let's try the following to r:
+```{r}
+r.mod = arima(r, order=c(1, 0, 0), seasonal=list(order=c(0,1,0), period=12))
+r.mod
+```
+```{r}
+preds = predict(r.mod, n.ahead=36)
+plot(c(r, preds$pred), type = "l")
+abline(v=length(r), col='red')
+```
+
+
+
+
