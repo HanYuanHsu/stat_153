@@ -165,15 +165,6 @@ mean((pred-ytest)^2)
 
 
 
-```{r}
-# average smoothing
-ave.filter = c(1/24, rep(1/12, 11), 1/24)
-ave.filter
-trend = stats::filter(ytrain, filter=ave.filter)
-plot(trend, type='l')
-```
-
-
 # 3
 ```{r}
 dat = read.csv('algebra.csv', header=T, skip=1)
@@ -248,7 +239,7 @@ my.model = function(p,q,P,Q) {
   r.pred = predict(r.mod, n.ahead=ntest)$pred %>% as.numeric()
   trend.coef = linmod$coefficients %>% as.numeric()
   pred.time = (ntrain+1):n
-  trend.pred = trend.coef[1] + trend.coef[2]*cos(pred.time) + trend.coef[3]*sin(pred.time)
+  trend.pred = trend.coef[1] + trend.coef[2]*cos(omega.hat*pred.time) + trend.coef[3]*sin(omega.hat*pred.time)
   pred = r.pred + trend.pred
   mse = mean((ytest - pred)^2)
   return( list(pred=pred, mse=mse, r.pred=r.pred) )
@@ -282,97 +273,187 @@ best.mse
 ```
 Let's plot the predictions given by this model, which are in red. Black is the actual data.
 ```{r}
+p = best.param[1]; q = best.param[2]; P = best.param[3]; Q = best.param[4];
+best.mod = my.model(p,q,P,Q)
 plot(1:n, y, type='l')
 lines((ntrain+1):n, best.mod$pred, col='red')
 ```
 
-
-
-
-
-##############################################
-
-
+# 4
 ```{r}
-mod.a = my.model(3, 0, 1, 0) # best
-mod.b = my.model(3, 0, 2, 0)
-mod.c = my.model(3, 0, 0, 1)
-mod.d = my.model(0, 3, 1, 0)
-mod.e = my.model(0, 3, 2, 0)
-mod.f = my.model(3, 3, 1, 0)
-mod.g = my.model(1, 0, 1, 0)
-mod.a$mse
-mod.b$mse
-mod.c$mse
-mod.d$mse
-mod.e$mse
-mod.f$mse
-mod.g$mse
+dat = read.csv('hiking.csv', header=T, skip=1)
+y = dat[,2]
+n = length(y)
+ntrain = n-ntest
+ytrain = y[1:ntrain]
+ytest = y[(ntrain+1):n]
 ```
 
+Below is the plot of the training data:
+```{r}
+plot(ytrain, type='l')
+```
+The long-term trend in this data seems to be sinusoidal again. Hence, we will first fit a sinusoid to the data just like in question 3.
 
 ```{r}
-L = 25
-phis = rep(0, 13)
-phis[1] = 0.32
-phis[12] = -0.3
-phis[13] = 0.25
-#corrs = ARMAacf(ar = phis, lag.max = L)
-#plot(x = 0:L, y = corrs, type = "h",  xlab = "Lag k", ylab = "acf") 
-#abline(h = 0)
-pcorrs = ARMAacf(ar = phis, lag.max = L, pacf=T)
-plot(x = 1:L, y = pcorrs, type = "h",  xlab = "Lag k", ylab = "pacf") 
-abline(h = 0)
+log.post.omega <- function(omega) { # log of posterior distribution
+  X = matrix(1, nrow=ntrain, ncol=3)
+  X[,2] = cos(omega*(1:ntrain))
+  X[,3] = sin(omega*(1:ntrain))
+  mod = lm(ytrain ~ -1 + X)
+  log.post = (ncol(X) - n)/2*log(sum(mod$residuals^2)) - 0.5*log(det(t(X) %*% X))
+  log.post
+}
+```
+```{r}
+omega.hat = optimize(log.post.omega, interval=c(2*pi/190, 2*pi/170), maximum=T)$maximum
 ```
 
+The period corresponding to omega.hat is
 ```{r}
-corrs = ARMAacf(ar = c(0.35), ma=c(rep(0,11), -0.2), lag.max = L)
-plot(x = 0:L, y = corrs, type = "h",  xlab = "Lag k", ylab = "acf") 
-abline(h = 0)
-pcorrs = ARMAacf(ar = c(0.35), ma=c(rep(0,11), -0.2), lag.max = L, pacf=T)
-plot(x = 1:L, y = pcorrs, type = "h",  xlab = "Lag k", ylab = "pacf") 
-abline(h = 0)
+2*pi/omega.hat
 ```
-
-
+The betas:
 ```{r}
-plot(1:ntrain, log(ytrain), type='l')
+X = matrix(1, nrow=ntrain, ncol=3)
+X[,2] = cos(omega.hat*(1:ntrain))
+X[,3] = sin(omega.hat*(1:ntrain))
+linmod = lm(ytrain ~ -1 + X)
+linmod$coefficients
 ```
+The fitted sinusoid is shown red below:
 ```{r}
-linmod = lm(log(y)~c(1:n))
-r = linmod$residuals %>% as.numeric()
+plot(ytrain, type='l')
+lines(linmod$fitted.values, col='red')
 ```
+By inspection, this data clearly has yearly seasonal trend, so we will do seasonal differencing to the residual r. The plot below shows the differenced residual rd.
 ```{r}
-plot(1:n, r, type='l')
+r = linmod$residuals
+rd = diff(r, 12)
+plot(rd, type='l')
 ```
-```{r}
-rd = diff(r, lag=12)
-n.rd = length(rd)
-plot(1:n.rd, rd, type='l')
-```
+If we look at the pacf of rd below, we see that lag 1 is very significant, and lag 12 and 13 are also significant. Hence, I guess a multiplicative seasonal AR(1) model will be a good fit to rd.
 ```{r}
 acf(rd)
 pacf(rd)
 ```
+
+But to be less subjective, we will still try out all $\text{ARIMA}(p, 0, q) \times (P, 1, Q)_{12}$ with p=0:3, q=0:3, P=0:1, Q=0:1, and pick the model with the smallest test MSE. 
 ```{r}
-plot(1:180, rd[1:180], type='l')
-acf(rd[1:180])
-pacf(rd[1:180])
+my.model = function(p,q,P,Q) {
+  r.mod = arima(r, order=c(p, 0, q), seasonal=list(order=c(P,1,Q), period=12))
+  r.pred = predict(r.mod, n.ahead=ntest)$pred %>% as.numeric()
+  trend.coef = linmod$coefficients %>% as.numeric()
+  pred.time = (ntrain+1):n
+  trend.pred = trend.coef[1] + trend.coef[2]*cos(omega.hat*pred.time) + trend.coef[3]*sin(omega.hat*pred.time)
+  pred = r.pred + trend.pred
+  mse = mean((ytest - pred)^2)
+  return( list(pred=pred, mse=mse, r.pred=r.pred) )
+}
+
+best.param = rep(-1, 4)
+best.mse = 9999
+for (p in 0:3) {
+  for (q in 0:3) {
+    for (P in 0:1) {
+      for (Q in 0:1) {
+        mod = my.model(p,q,P,Q)
+        if (mod$mse < best.mse) {
+          best.mse = mod$mse
+          best.param = c(p,q,P,Q)
+        }
+      }
+    }
+  }
+}
+
 ```
 
-from the pacf, maybe try AR1 or seasonal AR1?
-
-Let's try the following to r:
+The best model and its test MSE are indicated below. Turns out the best model is not the multiplicative seasonal AR(1) model I thought of above, whose set of parameters is (p,q,P,Q)=(1,0,1,0).
 ```{r}
-r.mod = arima(r, order=c(1, 0, 0), seasonal=list(order=c(0,1,0), period=12))
-r.mod
+best.param # Not 1 0 1 0
+best.mse
 ```
+The plot below displays the predictions given by the best model in red. 
 ```{r}
-preds = predict(r.mod, n.ahead=36)
-plot(c(r, preds$pred), type = "l")
-abline(v=length(r), col='red')
+p = best.param[1]; q = best.param[2]; P = best.param[3]; Q = best.param[4];
+best.mod = my.model(p,q,P,Q)
+plot(1:n, y, type='l')
+lines((ntrain+1):n, best.mod$pred, col='red')
+```
+I am still curious how the predictions given by the multiplicative seasonal AR(1) model look. Indeed, this model's test MSE is higher:
+```{r}
+mod1010 = my.model(1,0,1,0)
+plot(1:n, y, type='l')
+lines((ntrain+1):n, mod1010$pred, col='red')
+mod1010$mse
 ```
 
+# 5
+```{r}
+dat = read.csv('tutoring.csv', header=T, skip=1)
+y = dat[,2]
+n = length(y)
+ntest = 36
+ntrain = n-ntest
+ytrain = y[1:ntrain]
+ytest = y[(ntrain+1):n]
+```
 
+Below is the plot of the training data:
+```{r}
+plot(ytrain, type='l')
+```
+There is no clear long-term trend in the data, but the acf plot below suggests that the data still has yearly seasonality (see spike at lag 12):
+```{r}
+acf(ytrain)
+```
+
+Hence, we do yearly differencing directly:
+```{r}
+yd = diff(ytrain, 12)
+plot(yd, type='l')
+```
+
+Again, we try out all $\text{ARIMA}(p, 0, q) \times (P, 1, Q)_{12}$ with p=0:3, q=0:3, P=0:1, Q=0:1, and pick the model with the smallest test MSE.
+```{r}
+my.model = function(p,q,P,Q) {
+  mod = arima(ytrain, order=c(p, 0, q), seasonal=list(order=c(P,1,Q), period=12))
+  pred = predict(mod, n.ahead=ntest)$pred %>% as.numeric()
+  mse = mean((ytest - pred)^2)
+  return( list(pred=pred, mse=mse) )
+}
+
+best.param = rep(-1, 4)
+best.mse = 9999
+for (p in 0:3) {
+  for (q in 0:3) {
+    for (P in 0:1) {
+      for (Q in 0:1) {
+        mod = my.model(p,q,P,Q)
+        if (mod$mse < best.mse) {
+          best.mse = mod$mse
+          best.param = c(p,q,P,Q)
+        }
+      }
+    }
+  }
+}
+
+```
+
+The best set of parameters and the MSE of the best model are shown below:
+```{r}
+best.param
+best.mse
+```
+
+Below, the predictions given by the best model are in red, while the test data are in black:
+```{r}
+p = best.param[1]; q = best.param[2]; P = best.param[3]; Q = best.param[4];
+best.mod = my.model(p,q,P,Q)
+plot((ntrain+1):n, ytest, type='l')
+lines((ntrain+1):n, best.mod$pred, col='red')
+```
 
 

@@ -1,0 +1,55 @@
+---
+title: "hw6more"
+author: "Han-Yuan Hsu"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+# 5
+```{r}
+dat = read.csv('tutoring.csv', header=T, skip=1)
+y = dat[,2]
+n = length(y)
+ntest = 36
+ntrain = n-ntest
+ytrain = y[1:ntrain]
+ytest = y[(ntrain+1):n]
+```
+
+Below is the plot of the training data:
+```{r}
+plot(ytrain, type='l')
+```
+
+Consider modelling the oscillation amplitudes as well...
+
+```{r}
+m = ntrain %/% 12
+ave = rep(-9999, m)
+amp = rep(-9999, m) # oscillation amplitude in that year
+for (k in 1:m) {
+  z = ytrain[(12*k-11):(12*k)]
+  ave[k] = mean(z)
+  amp[k] = max(z) - min(z)
+}
+plot(amp, type='l')
+```
+
+```{r}
+period=12
+moving.amp = rep(-9999, ntrain-period)
+for (k in 1:length(moving.amp)) {
+  z = ytrain[k:(k+period)]
+  moving.amp[k] = max(z) - min(z)
+}
+plot(moving.amp, type='l')
+```
+```{r}
+moving.amp.lm = lm(moving.amp ~ c(1:length(moving.amp)))
+plot(moving.amp.lm$residual, type='l')
+```
+
+
+
+
+
